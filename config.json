@@ -1,54 +1,36 @@
 {
-  "version": "0.2",
+  "version": "0.3",
   "publisher": "flightflex",
-
   "rules": [
     {
       "id": "flightflex-flights-yyz-bjs",
       "enabled": true,
-
       "match": {
         "type": "path",
         "value": "/flights"
       },
-
       "product": "flight",
-
       "placement": "flightflex_flights_yyz_bjs_test",
-
       "eyebrow": "FLIGHTFLEX RECOMMENDS",
-
       "title": "Compare Toronto → Beijing Flights",
-
       "subtitle": "Check fares and flight options on Trip.com",
-
       "icon": "✈",
-
       "url": "https://www.trip.com/flights/Toronto-to-Beijing/tickets-YTO-BJS?flighttype=S&dcity=YTO&acity=BJS&Allianceid=10021103&SID=328317298&trip_sub1=flightflex_flights_yyz_bjs_test&trip_sub3=D19214085"
     },
-
     {
-      "id": "flightflex-china-blog-beijing-hotels",
+      "id": "flightflex-china-blog-hotels-generic",
       "enabled": true,
-
       "match": {
         "type": "path",
         "value": "/post/china-inbound-tourism-growth-trend-2026-why-more-travelers-are-returning-to-china"
       },
-
       "product": "hotel",
-
-      "placement": "flightflex_blog_china_inbound_hotels_test",
-
+      "placement": "flightflex_blog_china_inbound_hotels_generic_test",
       "eyebrow": "PLAN YOUR CHINA TRIP",
-
-      "title": "ChinaFlow Config Test — Beijing Hotels",
-
+      "title": "Find Hotels for Your China Trip",
       "subtitle": "Compare hotel options and book your stay on Trip.com",
-
       "icon": "▣",
-
-      "url": "https://www.trip.com/hotels/list?city=1&display=Beijing&optionId=1&optionType=City&optionName=Beijing&Allianceid=10021103&SID=328317298&trip_sub1=flightflex_blog_china_inbound_hotels_test&trip_sub3=D19216528"
+      "url": "https://www.trip.com/hotels?Allianceid=10021103&SID=328317298&trip_sub1=flightflex_blog_china_inbound_hotels_generic_test&trip_sub3=D19217690"
     }
   ]
 }
