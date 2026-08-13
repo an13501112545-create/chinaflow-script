@@ -7,7 +7,7 @@
 
 
   // =========================================================
-  // Load config
+  // CONFIG
   // =========================================================
 
   async function loadConfig() {
@@ -23,8 +23,7 @@
 
       if (!response.ok) {
         throw new Error(
-          "Config load failed: " +
-          response.status
+          "Config load failed: " + response.status
         );
       }
 
@@ -47,7 +46,7 @@
 
 
   // =========================================================
-  // Helpers
+  // HELPERS
   // =========================================================
 
   function normalizePath(path) {
@@ -76,18 +75,51 @@
   }
 
 
+  function countKeyword(text, keyword) {
+
+    if (!text || !keyword) {
+      return 0;
+    }
+
+    let count = 0;
+    let position = 0;
+
+    while (true) {
+
+      position =
+        text.indexOf(
+          keyword,
+          position
+        );
+
+      if (position === -1) {
+        break;
+      }
+
+      count++;
+
+      position +=
+        keyword.length;
+
+    }
+
+    return count;
+
+  }
+
+
   // =========================================================
-  // Read page content
+  // READ PAGE
   // =========================================================
 
   function readPageContext() {
 
-    const title =
+    const rawTitle =
       document.querySelector("h1")?.innerText ||
       document.title ||
       "";
 
-    const metaDescription =
+    const rawMeta =
       document
         .querySelector(
           'meta[name="description"]'
@@ -95,17 +127,30 @@
         ?.getAttribute("content") ||
       "";
 
-    const bodyText =
-      document.body?.innerText ||
-      "";
+    /*
+     * Use paragraph content instead of entire body.
+     * This prevents site navigation / brand name such as
+     * "FlightFlex" from polluting product classification.
+     */
+    const paragraphs =
+      Array.from(
+        document.querySelectorAll("p")
+      )
+      .map(
+        element =>
+          element.innerText || ""
+      )
+      .join(" ");
 
-    const combined =
+    const title =
+      normalizeText(rawTitle);
+
+    const meta =
+      normalizeText(rawMeta);
+
+    const body =
       normalizeText(
-        title +
-        " " +
-        metaDescription +
-        " " +
-        bodyText.slice(0, 12000)
+        paragraphs.slice(0, 15000)
       );
 
     return {
@@ -116,15 +161,27 @@
         ),
 
       title:
-        normalizeText(title),
+        title,
 
-      metaDescription:
+      meta:
+        meta,
+
+      body:
+        body,
+
+      strongText:
         normalizeText(
-          metaDescription
+          title + " " + meta
         ),
 
-      text:
-        combined
+      allText:
+        normalizeText(
+          title +
+          " " +
+          meta +
+          " " +
+          body
+        )
 
     };
 
@@ -132,7 +189,7 @@
 
 
   // =========================================================
-  // Exact path rule
+  // EXACT URL RULE
   // =========================================================
 
   function findExactPathRule(
@@ -145,6 +202,7 @@
     ) {
       return null;
     }
+
 
     return CONFIG.rules.find(
       function (rule) {
@@ -176,27 +234,23 @@
 
 
   // =========================================================
-  // China travel intent detection
+  // CHINA TRAVEL INTENT
   // =========================================================
 
   function detectChinaTravelIntent(
     context
   ) {
 
-    const text =
-      context.text;
-
-
     const chinaSignals = [
 
       "china",
-      "chinese travel",
       "travel to china",
       "trip to china",
       "visit china",
       "china travel",
       "china tourism",
       "china inbound",
+
       "beijing",
       "shanghai",
       "guangzhou",
@@ -223,6 +277,7 @@
       "vacation",
       "holiday",
       "itinerary",
+
       "hotel",
       "flight",
       "airport",
@@ -236,14 +291,18 @@
     const chinaMatches =
       chinaSignals.filter(
         keyword =>
-          text.includes(keyword)
+          context.allText.includes(
+            keyword
+          )
       );
 
 
     const travelMatches =
       travelSignals.filter(
         keyword =>
-          text.includes(keyword)
+          context.allText.includes(
+            keyword
+          )
       );
 
 
@@ -274,32 +333,198 @@
 
 
   // =========================================================
-  // Find generic hotel rule in config
+  // PRODUCT INTENT
   // =========================================================
 
-  function findGenericChinaHotelRule() {
+  function calculateProductScore(
+    context,
+    keywords
+  ) {
+
+    let score = 0;
+
+    keywords.forEach(
+      function (keyword) {
+
+        /*
+         * H1 + meta are high-intent signals.
+         *
+         * Example:
+         * "Best Flight Options Between Canada and China"
+         *
+         * should strongly route to Flight.
+         */
+        const strongCount =
+          countKeyword(
+            context.strongText,
+            keyword
+          );
+
+        /*
+         * Body text is weaker.
+         */
+        const bodyCount =
+          countKeyword(
+            context.body,
+            keyword
+          );
+
+
+        score +=
+          strongCount * 6;
+
+        score +=
+          Math.min(
+            bodyCount,
+            3
+          );
+
+      }
+    );
+
+    return score;
+
+  }
+
+
+  function detectProductIntent(
+    context
+  ) {
+
+    const flightKeywords = [
+
+      "flight",
+      "flights",
+      "airfare",
+      "airline",
+      "airlines",
+      "flying",
+      "plane ticket",
+      "plane tickets",
+      "air ticket",
+      "air tickets"
+
+    ];
+
+
+    const hotelKeywords = [
+
+      "hotel",
+      "hotels",
+      "accommodation",
+      "accommodations",
+      "where to stay",
+      "place to stay",
+      "places to stay",
+      "resort",
+      "resorts"
+
+    ];
+
+
+    const flightScore =
+      calculateProductScore(
+        context,
+        flightKeywords
+      );
+
+
+    const hotelScore =
+      calculateProductScore(
+        context,
+        hotelKeywords
+      );
+
+
+    let product =
+      "hotel";
+
+    let reason =
+      "generic_china_travel_fallback";
+
+
+    /*
+     * Specialized product routing requires
+     * a strong signal.
+     *
+     * We intentionally do NOT send a generic
+     * China article to Flights just because
+     * the article briefly mentions flights.
+     */
+    if (
+      flightScore >= 6 &&
+      flightScore >
+        hotelScore + 2
+    ) {
+
+      product =
+        "flight";
+
+      reason =
+        "strong_flight_intent";
+
+    } else if (
+      hotelScore >= 6 &&
+      hotelScore >
+        flightScore + 2
+    ) {
+
+      product =
+        "hotel";
+
+      reason =
+        "strong_hotel_intent";
+
+    }
+
+
+    return {
+
+      product:
+        product,
+
+      reason:
+        reason,
+
+      scores: {
+
+        flight:
+          flightScore,
+
+        hotel:
+          hotelScore
+
+      }
+
+    };
+
+  }
+
+
+  // =========================================================
+  // OFFER LOOKUP
+  // =========================================================
+
+  function findOffer(
+    product
+  ) {
 
     if (
       !CONFIG ||
-      !Array.isArray(CONFIG.rules)
+      !Array.isArray(
+        CONFIG.offers
+      )
     ) {
       return null;
     }
 
 
-    return CONFIG.rules.find(
-      function (rule) {
-
-        if (
-          rule.enabled === false
-        ) {
-          return false;
-        }
+    return CONFIG.offers.find(
+      function (offer) {
 
         return (
-          rule.product === "hotel" &&
-          rule.placement ===
-            "flightflex_blog_china_inbound_hotels_generic_test"
+          offer.enabled !== false &&
+          offer.product === product
         );
 
       }
@@ -309,7 +534,7 @@
 
 
   // =========================================================
-  // Intelligent rule selection
+  // SMART ROUTING
   // =========================================================
 
   function selectRule() {
@@ -319,8 +544,10 @@
 
 
     /*
-     * Priority 1:
-     * Exact publisher rule
+     * Priority 1
+     *
+     * Publisher explicitly configured
+     * a specific URL.
      */
     const exactRule =
       findExactPathRule(
@@ -341,89 +568,137 @@
 
 
     /*
-     * Priority 2:
-     * Content intent recognition
+     * Priority 2
+     *
+     * Automatic monetization applies
+     * to content pages.
      */
     if (
-      context.path.startsWith(
+      !context.path.startsWith(
         "/post/"
       )
     ) {
 
-      const intent =
-        detectChinaTravelIntent(
-          context
-        );
-
-
       console.log(
-        "[ChinaFlow v0.3] Content analysis:",
-        {
-          title:
-            context.title,
-          score:
-            intent.score,
-          china:
-            intent.chinaMatches,
-          travel:
-            intent.travelMatches
-        }
+        "[ChinaFlow v0.3] Non-content page — no auto routing"
+      );
+
+      return null;
+
+    }
+
+
+    /*
+     * Step A
+     *
+     * Is this China travel content?
+     */
+    const travelIntent =
+      detectChinaTravelIntent(
+        context
       );
 
 
-      if (
-        intent.matched
-      ) {
+    console.log(
+      "[ChinaFlow v0.3] China travel analysis:",
+      {
 
-        const genericHotelRule =
-          findGenericChinaHotelRule();
+        title:
+          context.title,
 
+        score:
+          travelIntent.score,
 
-        if (
-          genericHotelRule
-        ) {
+        china:
+          travelIntent.chinaMatches,
 
-          console.log(
-            "[ChinaFlow v0.3] China travel intent detected → generic hotel"
-          );
-
-          return {
-            ...genericHotelRule,
-
-            id:
-              "auto-china-travel-hotel",
-
-            placement:
-              "flightflex_auto_china_travel_hotel",
-
-            eyebrow:
-              "PLAN YOUR CHINA TRIP",
-
-            title:
-              "Find Hotels for Your China Trip",
-
-            subtitle:
-              "Compare hotel options and book your stay on Trip.com"
-          };
-
-        }
+        travel:
+          travelIntent.travelMatches
 
       }
+    );
+
+
+    if (
+      !travelIntent.matched
+    ) {
+
+      console.log(
+        "[ChinaFlow v0.3] No China travel intent"
+      );
+
+      return null;
+
+    }
+
+
+    /*
+     * Step B
+     *
+     * Which travel product?
+     */
+    const productIntent =
+      detectProductIntent(
+        context
+      );
+
+
+    console.log(
+      "[ChinaFlow v0.3] Product intent:",
+      productIntent
+    );
+
+
+    /*
+     * Step C
+     *
+     * Find corresponding affiliate offer.
+     */
+    const offer =
+      findOffer(
+        productIntent.product
+      );
+
+
+    if (!offer) {
+
+      console.warn(
+        "[ChinaFlow v0.3] No offer available:",
+        productIntent.product
+      );
+
+      return null;
 
     }
 
 
     console.log(
-      "[ChinaFlow v0.3] No monetization intent detected"
+      "[ChinaFlow v0.3] Smart route:",
+      productIntent.product,
+      "→",
+      offer.id
     );
 
-    return null;
+
+    return {
+
+      ...offer,
+
+      id:
+        "auto-" +
+        productIntent.product +
+        "-offer",
+
+      routing_reason:
+        productIntent.reason
+
+    };
 
   }
 
 
   // =========================================================
-  // Remove CTA
+  // REMOVE CTA
   // =========================================================
 
   function removeExistingCTA() {
@@ -441,19 +716,24 @@
 
 
   // =========================================================
-  // Render CTA
+  // RENDER CTA
   // =========================================================
 
   function renderCTA(rule) {
 
-    if (!rule) return;
+    if (!rule) {
+      return;
+    }
 
 
     const wrap =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
 
     wrap.id =
       "chinaflow-auto-cta";
+
 
     wrap.dataset.publisher =
       CONFIG?.publisher || "";
@@ -464,37 +744,53 @@
     wrap.dataset.placement =
       rule.placement || "";
 
+    wrap.dataset.rule =
+      rule.id || "";
+
 
     Object.assign(
       wrap.style,
       {
 
-        position: "fixed",
+        position:
+          "fixed",
 
-        left: "0",
+        left:
+          "0",
 
-        right: "0",
+        right:
+          "0",
 
-        bottom: "26px",
+        bottom:
+          "26px",
 
-        zIndex: "999999",
+        zIndex:
+          "999999",
 
-        display: "flex",
+        display:
+          "flex",
 
-        justifyContent: "center",
+        justifyContent:
+          "center",
 
-        padding: "0 18px",
+        padding:
+          "0 18px",
 
-        boxSizing: "border-box",
+        boxSizing:
+          "border-box",
 
-        pointerEvents: "none"
+        pointerEvents:
+          "none"
 
       }
     );
 
 
     const link =
-      document.createElement("a");
+      document.createElement(
+        "a"
+      );
+
 
     link.href =
       rule.url;
@@ -506,30 +802,46 @@
       "noopener sponsored";
 
 
+    link.setAttribute(
+      "aria-label",
+      rule.title ||
+        "Travel offer"
+    );
+
+
     Object.assign(
       link.style,
       {
 
-        width: "100%",
+        width:
+          "100%",
 
-        maxWidth: "620px",
+        maxWidth:
+          "620px",
 
-        minHeight: "82px",
+        minHeight:
+          "82px",
 
-        display: "flex",
+        display:
+          "flex",
 
-        alignItems: "center",
+        alignItems:
+          "center",
 
-        padding: "14px 18px",
+        padding:
+          "14px 18px",
 
         background:
           "linear-gradient(135deg, #0f3fbb 0%, #175de4 55%, #3478f6 100%)",
 
-        color: "#ffffff",
+        color:
+          "#ffffff",
 
-        textDecoration: "none",
+        textDecoration:
+          "none",
 
-        borderRadius: "18px",
+        borderRadius:
+          "18px",
 
         boxShadow:
           "0 16px 40px rgba(20, 76, 190, 0.32)",
@@ -537,72 +849,101 @@
         border:
           "1px solid rgba(255,255,255,0.22)",
 
-        boxSizing: "border-box",
+        boxSizing:
+          "border-box",
 
         fontFamily:
           '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif',
 
-        pointerEvents: "auto",
+        pointerEvents:
+          "auto",
 
-        cursor: "pointer"
+        cursor:
+          "pointer",
+
+        transition:
+          "transform 0.18s ease, box-shadow 0.18s ease"
 
       }
     );
 
 
     const icon =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
+
 
     icon.textContent =
-      rule.icon || "▣";
+      rule.icon || "→";
 
 
     Object.assign(
       icon.style,
       {
 
-        width: "48px",
+        width:
+          "48px",
 
-        height: "48px",
+        height:
+          "48px",
 
-        minWidth: "48px",
+        minWidth:
+          "48px",
 
-        display: "flex",
+        display:
+          "flex",
 
-        alignItems: "center",
+        alignItems:
+          "center",
 
-        justifyContent: "center",
+        justifyContent:
+          "center",
 
-        marginRight: "14px",
+        marginRight:
+          "14px",
 
-        borderRadius: "14px",
+        borderRadius:
+          "14px",
 
         background:
           "rgba(255,255,255,0.16)",
 
-        fontSize: "23px",
+        fontSize:
+          "23px",
 
-        fontWeight: "700"
+        fontWeight:
+          "700"
 
       }
     );
 
 
     const content =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
 
 
     Object.assign(
       content.style,
       {
-        flex: "1",
-        minWidth: "0"
+
+        flex:
+          "1",
+
+        minWidth:
+          "0"
+
       }
     );
 
 
     const eyebrow =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
+
 
     eyebrow.textContent =
       rule.eyebrow || "";
@@ -612,15 +953,20 @@
       eyebrow.style,
       {
 
-        marginBottom: "3px",
+        marginBottom:
+          "3px",
 
-        fontSize: "10px",
+        fontSize:
+          "10px",
 
-        lineHeight: "1.2",
+        lineHeight:
+          "1.2",
 
-        fontWeight: "700",
+        fontWeight:
+          "700",
 
-        letterSpacing: "1.1px",
+        letterSpacing:
+          "1.1px",
 
         color:
           "rgba(255,255,255,0.72)"
@@ -630,7 +976,10 @@
 
 
     const title =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
+
 
     title.textContent =
       rule.title || "";
@@ -640,20 +989,27 @@
       title.style,
       {
 
-        fontSize: "17px",
+        fontSize:
+          "17px",
 
-        lineHeight: "1.35",
+        lineHeight:
+          "1.35",
 
-        fontWeight: "700",
+        fontWeight:
+          "700",
 
-        color: "#ffffff"
+        color:
+          "#ffffff"
 
       }
     );
 
 
     const subtitle =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
+
 
     subtitle.textContent =
       rule.subtitle || "";
@@ -663,11 +1019,14 @@
       subtitle.style,
       {
 
-        marginTop: "3px",
+        marginTop:
+          "3px",
 
-        fontSize: "12px",
+        fontSize:
+          "12px",
 
-        lineHeight: "1.3",
+        lineHeight:
+          "1.3",
 
         color:
           "rgba(255,255,255,0.78)"
@@ -677,7 +1036,10 @@
 
 
     const arrow =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
+
 
     arrow.textContent =
       "→";
@@ -687,17 +1049,23 @@
       arrow.style,
       {
 
-        width: "38px",
+        width:
+          "38px",
 
-        minWidth: "38px",
+        minWidth:
+          "38px",
 
-        marginLeft: "12px",
+        marginLeft:
+          "12px",
 
-        textAlign: "center",
+        textAlign:
+          "center",
 
-        fontSize: "24px",
+        fontSize:
+          "24px",
 
-        color: "#ffffff"
+        color:
+          "#ffffff"
 
       }
     );
@@ -739,6 +1107,28 @@
     );
 
 
+    link.addEventListener(
+      "mouseenter",
+      function () {
+
+        link.style.transform =
+          "translateY(-3px)";
+
+      }
+    );
+
+
+    link.addEventListener(
+      "mouseleave",
+      function () {
+
+        link.style.transform =
+          "translateY(0)";
+
+      }
+    );
+
+
     if (
       window.innerWidth <= 600
     ) {
@@ -749,6 +1139,7 @@
       wrap.style.padding =
         "0 10px";
 
+
       link.style.minHeight =
         "72px";
 
@@ -757,6 +1148,7 @@
 
       link.style.borderRadius =
         "15px";
+
 
       title.style.fontSize =
         "15px";
@@ -770,7 +1162,7 @@
 
 
   // =========================================================
-  // Evaluate
+  // EVALUATE
   // =========================================================
 
   async function evaluatePage() {
@@ -785,8 +1177,7 @@
 
 
     /*
-     * Give Wix Blog enough time
-     * to render article content.
+     * Allow Wix Blog to finish rendering.
      */
     await new Promise(
       resolve =>
@@ -802,14 +1193,18 @@
 
 
     if (rule) {
-      renderCTA(rule);
+
+      renderCTA(
+        rule
+      );
+
     }
 
   }
 
 
   // =========================================================
-  // Start
+  // START
   // =========================================================
 
   function initialize() {
@@ -840,7 +1235,7 @@
 
 
   // =========================================================
-  // Wix SPA navigation
+  // WIX SPA NAVIGATION
   // =========================================================
 
   let lastUrl =
@@ -869,8 +1264,13 @@
   ).observe(
     document.documentElement,
     {
-      childList: true,
-      subtree: true
+
+      childList:
+        true,
+
+      subtree:
+        true
+
     }
   );
 
