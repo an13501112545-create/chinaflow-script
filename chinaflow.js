@@ -4,7 +4,7 @@
     rules: [{
       path: "/flights",
       placement: "flightflex_flights_yyz_bjs_test",
-      label: "Compare Toronto → Beijing Flights on Trip.com →",
+      label: "ChinaFlow Remote Test — Toronto → Beijing →",
       url: "https://www.trip.com/flights/Toronto-to-Beijing/tickets-YTO-BJS?flighttype=S&dcity=YTO&acity=BJS&Allianceid=10021103&SID=328317298&trip_sub1=flightflex_flights_yyz_bjs_test&trip_sub3=D19214085"
     }]
   };
