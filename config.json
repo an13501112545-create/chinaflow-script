@@ -1,6 +1,7 @@
 {
-  "version": "0.3",
+  "version": "0.4",
   "publisher": "flightflex",
+
   "rules": [
     {
       "id": "flightflex-flights-yyz-bjs",
@@ -17,6 +18,7 @@
       "icon": "✈",
       "url": "https://www.trip.com/flights/Toronto-to-Beijing/tickets-YTO-BJS?flighttype=S&dcity=YTO&acity=BJS&Allianceid=10021103&SID=328317298&trip_sub1=flightflex_flights_yyz_bjs_test&trip_sub3=D19214085"
     },
+
     {
       "id": "flightflex-china-blog-hotels-generic",
       "enabled": true,
@@ -31,6 +33,32 @@
       "subtitle": "Compare hotel options and book your stay on Trip.com",
       "icon": "▣",
       "url": "https://www.trip.com/hotels?Allianceid=10021103&SID=328317298&trip_sub1=flightflex_blog_china_inbound_hotels_generic_test&trip_sub3=D19217690"
+    }
+  ],
+
+  "offers": [
+    {
+      "id": "china-hotels-generic",
+      "enabled": true,
+      "product": "hotel",
+      "placement": "flightflex_auto_china_hotels_generic_test",
+      "eyebrow": "PLAN YOUR CHINA TRIP",
+      "title": "Find Hotels for Your China Trip",
+      "subtitle": "Compare hotel options and book your stay on Trip.com",
+      "icon": "▣",
+      "url": "https://www.trip.com/hotels?Allianceid=10021103&SID=328317298&trip_sub1=flightflex_blog_china_inbound_hotels_generic_test&trip_sub3=D19217690"
+    },
+
+    {
+      "id": "china-flights-generic",
+      "enabled": true,
+      "product": "flight",
+      "placement": "flightflex_auto_china_flights_generic_test",
+      "eyebrow": "PLAN YOUR CHINA TRIP",
+      "title": "Compare Flights for Your China Trip",
+      "subtitle": "Check flight options and fares on Trip.com",
+      "icon": "✈",
+      "url": "https://www.trip.com/flights?Allianceid=10021103&SID=328317298&trip_sub1=flightflex_auto_china_flights_generic_test&trip_sub3=D19217690"
     }
   ]
 }
