@@ -3,30 +3,27 @@
   const CHINAFLOW_CONFIG_URL =
     "https://raw.githubusercontent.com/an13501112545-create/chinaflow-script/main/config.json";
 
-
   let CONFIG = null;
 
 
   // =========================================================
-  // Load latest remote configuration
+  // Load config
   // =========================================================
 
   async function loadConfig() {
 
     try {
 
-      const url =
-        CHINAFLOW_CONFIG_URL +
-        "?t=" +
-        Date.now();
-
-      const response = await fetch(url, {
-        cache: "no-store"
-      });
+      const response = await fetch(
+        CHINAFLOW_CONFIG_URL + "?t=" + Date.now(),
+        {
+          cache: "no-store"
+        }
+      );
 
       if (!response.ok) {
         throw new Error(
-          "ChinaFlow config load failed: " +
+          "Config load failed: " +
           response.status
         );
       }
@@ -38,7 +35,7 @@
     } catch (error) {
 
       console.error(
-        "[ChinaFlow] Unable to load config",
+        "[ChinaFlow v0.3] Config load failed",
         error
       );
 
@@ -50,7 +47,7 @@
 
 
   // =========================================================
-  // Normalize path
+  // Helpers
   // =========================================================
 
   function normalizePath(path) {
@@ -69,47 +66,108 @@
   }
 
 
+  function normalizeText(text) {
+
+    return String(text || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+
+  }
+
+
   // =========================================================
-  // Find matching monetization rule
+  // Read page content
   // =========================================================
 
-  function getCurrentRule() {
+  function readPageContext() {
 
-    if (!CONFIG || !CONFIG.rules) {
-      return null;
-    }
+    const title =
+      document.querySelector("h1")?.innerText ||
+      document.title ||
+      "";
 
-    const currentPath =
-      normalizePath(
-        window.location.pathname
+    const metaDescription =
+      document
+        .querySelector(
+          'meta[name="description"]'
+        )
+        ?.getAttribute("content") ||
+      "";
+
+    const bodyText =
+      document.body?.innerText ||
+      "";
+
+    const combined =
+      normalizeText(
+        title +
+        " " +
+        metaDescription +
+        " " +
+        bodyText.slice(0, 12000)
       );
 
+    return {
+
+      path:
+        normalizePath(
+          window.location.pathname
+        ),
+
+      title:
+        normalizeText(title),
+
+      metaDescription:
+        normalizeText(
+          metaDescription
+        ),
+
+      text:
+        combined
+
+    };
+
+  }
+
+
+  // =========================================================
+  // Exact path rule
+  // =========================================================
+
+  function findExactPathRule(
+    context
+  ) {
+
+    if (
+      !CONFIG ||
+      !Array.isArray(CONFIG.rules)
+    ) {
+      return null;
+    }
 
     return CONFIG.rules.find(
       function (rule) {
 
-        if (rule.enabled === false) {
-          return false;
-        }
-
-        if (!rule.match) {
+        if (
+          rule.enabled === false ||
+          !rule.match
+        ) {
           return false;
         }
 
         if (
-          rule.match.type === "path"
+          rule.match.type !== "path"
         ) {
-
-          return (
-            currentPath ===
-            normalizePath(
-              rule.match.value
-            )
-          );
-
+          return false;
         }
 
-        return false;
+        return (
+          context.path ===
+          normalizePath(
+            rule.match.value
+          )
+        );
 
       }
     );
@@ -118,7 +176,254 @@
 
 
   // =========================================================
-  // Remove current CTA
+  // China travel intent detection
+  // =========================================================
+
+  function detectChinaTravelIntent(
+    context
+  ) {
+
+    const text =
+      context.text;
+
+
+    const chinaSignals = [
+
+      "china",
+      "chinese travel",
+      "travel to china",
+      "trip to china",
+      "visit china",
+      "china travel",
+      "china tourism",
+      "china inbound",
+      "beijing",
+      "shanghai",
+      "guangzhou",
+      "shenzhen",
+      "chengdu",
+      "xi'an",
+      "xian",
+      "hangzhou",
+      "suzhou",
+      "guilin",
+      "zhangjiajie"
+
+    ];
+
+
+    const travelSignals = [
+
+      "travel",
+      "trip",
+      "tourism",
+      "tourist",
+      "visitor",
+      "visit",
+      "vacation",
+      "holiday",
+      "itinerary",
+      "hotel",
+      "flight",
+      "airport",
+      "train",
+      "attraction",
+      "tour"
+
+    ];
+
+
+    const chinaMatches =
+      chinaSignals.filter(
+        keyword =>
+          text.includes(keyword)
+      );
+
+
+    const travelMatches =
+      travelSignals.filter(
+        keyword =>
+          text.includes(keyword)
+      );
+
+
+    const score =
+      chinaMatches.length * 2 +
+      travelMatches.length;
+
+
+    return {
+
+      matched:
+        chinaMatches.length >= 1 &&
+        travelMatches.length >= 1 &&
+        score >= 4,
+
+      score:
+        score,
+
+      chinaMatches:
+        chinaMatches,
+
+      travelMatches:
+        travelMatches
+
+    };
+
+  }
+
+
+  // =========================================================
+  // Find generic hotel rule in config
+  // =========================================================
+
+  function findGenericChinaHotelRule() {
+
+    if (
+      !CONFIG ||
+      !Array.isArray(CONFIG.rules)
+    ) {
+      return null;
+    }
+
+
+    return CONFIG.rules.find(
+      function (rule) {
+
+        if (
+          rule.enabled === false
+        ) {
+          return false;
+        }
+
+        return (
+          rule.product === "hotel" &&
+          rule.placement ===
+            "flightflex_blog_china_inbound_hotels_generic_test"
+        );
+
+      }
+    );
+
+  }
+
+
+  // =========================================================
+  // Intelligent rule selection
+  // =========================================================
+
+  function selectRule() {
+
+    const context =
+      readPageContext();
+
+
+    /*
+     * Priority 1:
+     * Exact publisher rule
+     */
+    const exactRule =
+      findExactPathRule(
+        context
+      );
+
+
+    if (exactRule) {
+
+      console.log(
+        "[ChinaFlow v0.3] Exact rule:",
+        exactRule.id
+      );
+
+      return exactRule;
+
+    }
+
+
+    /*
+     * Priority 2:
+     * Content intent recognition
+     */
+    if (
+      context.path.startsWith(
+        "/post/"
+      )
+    ) {
+
+      const intent =
+        detectChinaTravelIntent(
+          context
+        );
+
+
+      console.log(
+        "[ChinaFlow v0.3] Content analysis:",
+        {
+          title:
+            context.title,
+          score:
+            intent.score,
+          china:
+            intent.chinaMatches,
+          travel:
+            intent.travelMatches
+        }
+      );
+
+
+      if (
+        intent.matched
+      ) {
+
+        const genericHotelRule =
+          findGenericChinaHotelRule();
+
+
+        if (
+          genericHotelRule
+        ) {
+
+          console.log(
+            "[ChinaFlow v0.3] China travel intent detected → generic hotel"
+          );
+
+          return {
+            ...genericHotelRule,
+
+            id:
+              "auto-china-travel-hotel",
+
+            placement:
+              "flightflex_auto_china_travel_hotel",
+
+            eyebrow:
+              "PLAN YOUR CHINA TRIP",
+
+            title:
+              "Find Hotels for Your China Trip",
+
+            subtitle:
+              "Compare hotel options and book your stay on Trip.com"
+          };
+
+        }
+
+      }
+
+    }
+
+
+    console.log(
+      "[ChinaFlow v0.3] No monetization intent detected"
+    );
+
+    return null;
+
+  }
+
+
+  // =========================================================
+  // Remove CTA
   // =========================================================
 
   function removeExistingCTA() {
@@ -143,18 +448,6 @@
 
     if (!rule) return;
 
-    if (
-      document.getElementById(
-        "chinaflow-auto-cta"
-      )
-    ) {
-      return;
-    }
-
-
-    // ---------------------------------------------------------
-    // Outer wrapper
-    // ---------------------------------------------------------
 
     const wrap =
       document.createElement("div");
@@ -163,7 +456,7 @@
       "chinaflow-auto-cta";
 
     wrap.dataset.publisher =
-      CONFIG.publisher || "";
+      CONFIG?.publisher || "";
 
     wrap.dataset.product =
       rule.product || "";
@@ -200,24 +493,17 @@
     );
 
 
-    // ---------------------------------------------------------
-    // Main CTA link
-    // ---------------------------------------------------------
-
     const link =
       document.createElement("a");
 
-    link.href = rule.url;
+    link.href =
+      rule.url;
 
-    link.target = "_blank";
+    link.target =
+      "_blank";
 
     link.rel =
       "noopener sponsored";
-
-    link.setAttribute(
-      "aria-label",
-      rule.title || "Travel offer"
-    );
 
 
     Object.assign(
@@ -258,24 +544,17 @@
 
         pointerEvents: "auto",
 
-        transition:
-          "transform 0.18s ease, box-shadow 0.18s ease",
-
         cursor: "pointer"
 
       }
     );
 
 
-    // ---------------------------------------------------------
-    // Icon
-    // ---------------------------------------------------------
-
     const icon =
       document.createElement("div");
 
     icon.textContent =
-      rule.icon || "→";
+      rule.icon || "▣";
 
 
     Object.assign(
@@ -309,10 +588,6 @@
     );
 
 
-    // ---------------------------------------------------------
-    // Text block
-    // ---------------------------------------------------------
-
     const content =
       document.createElement("div");
 
@@ -320,11 +595,8 @@
     Object.assign(
       content.style,
       {
-
         flex: "1",
-
         minWidth: "0"
-
       }
     );
 
@@ -397,8 +669,6 @@
 
         lineHeight: "1.3",
 
-        fontWeight: "400",
-
         color:
           "rgba(255,255,255,0.78)"
 
@@ -406,14 +676,11 @@
     );
 
 
-    // ---------------------------------------------------------
-    // Arrow
-    // ---------------------------------------------------------
-
     const arrow =
       document.createElement("div");
 
-    arrow.textContent = "→";
+    arrow.textContent =
+      "→";
 
 
     Object.assign(
@@ -435,10 +702,6 @@
       }
     );
 
-
-    // ---------------------------------------------------------
-    // Assemble
-    // ---------------------------------------------------------
 
     content.appendChild(
       eyebrow
@@ -476,42 +739,6 @@
     );
 
 
-    // ---------------------------------------------------------
-    // Hover
-    // ---------------------------------------------------------
-
-    link.addEventListener(
-      "mouseenter",
-      function () {
-
-        link.style.transform =
-          "translateY(-3px)";
-
-        link.style.boxShadow =
-          "0 20px 46px rgba(20, 76, 190, 0.40)";
-
-      }
-    );
-
-
-    link.addEventListener(
-      "mouseleave",
-      function () {
-
-        link.style.transform =
-          "translateY(0)";
-
-        link.style.boxShadow =
-          "0 16px 40px rgba(20, 76, 190, 0.32)";
-
-      }
-    );
-
-
-    // ---------------------------------------------------------
-    // Mobile
-    // ---------------------------------------------------------
-
     if (
       window.innerWidth <= 600
     ) {
@@ -522,7 +749,6 @@
       wrap.style.padding =
         "0 10px";
 
-
       link.style.minHeight =
         "72px";
 
@@ -532,38 +758,11 @@
       link.style.borderRadius =
         "15px";
 
-
-      icon.style.width =
-        "42px";
-
-      icon.style.height =
-        "42px";
-
-      icon.style.minWidth =
-        "42px";
-
-      icon.style.marginRight =
-        "11px";
-
-
       title.style.fontSize =
         "15px";
 
       subtitle.style.fontSize =
         "11px";
-
-
-      arrow.style.width =
-        "25px";
-
-      arrow.style.minWidth =
-        "25px";
-
-      arrow.style.marginLeft =
-        "7px";
-
-      arrow.style.fontSize =
-        "20px";
 
     }
 
@@ -571,7 +770,7 @@
 
 
   // =========================================================
-  // Evaluate current page
+  // Evaluate
   // =========================================================
 
   async function evaluatePage() {
@@ -580,45 +779,44 @@
 
     await loadConfig();
 
-    if (!CONFIG) return;
-
-
-    const rule =
-      getCurrentRule();
-
-
-    if (!rule) {
-
-      console.log(
-        "[ChinaFlow] No matching rule:",
-        window.location.pathname
-      );
-
+    if (!CONFIG) {
       return;
-
     }
 
 
-    console.log(
-      "[ChinaFlow] Rule matched:",
-      rule.id
+    /*
+     * Give Wix Blog enough time
+     * to render article content.
+     */
+    await new Promise(
+      resolve =>
+        setTimeout(
+          resolve,
+          1000
+        )
     );
 
 
-    renderCTA(rule);
+    const rule =
+      selectRule();
+
+
+    if (rule) {
+      renderCTA(rule);
+    }
 
   }
 
 
   // =========================================================
-  // Initial load
+  // Start
   // =========================================================
 
-  function initializeChinaFlow() {
+  function initialize() {
 
     setTimeout(
       evaluatePage,
-      500
+      700
     );
 
   }
@@ -631,18 +829,18 @@
 
     document.addEventListener(
       "DOMContentLoaded",
-      initializeChinaFlow
+      initialize
     );
 
   } else {
 
-    initializeChinaFlow();
+    initialize();
 
   }
 
 
   // =========================================================
-  // Wix SPA navigation detection
+  // Wix SPA navigation
   // =========================================================
 
   let lastUrl =
@@ -662,7 +860,7 @@
 
         setTimeout(
           evaluatePage,
-          500
+          700
         );
 
       }
@@ -671,11 +869,8 @@
   ).observe(
     document.documentElement,
     {
-
       childList: true,
-
       subtree: true
-
     }
   );
 
