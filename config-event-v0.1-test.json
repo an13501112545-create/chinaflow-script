@@ -5,7 +5,7 @@
   "analytics": {
     "enabled": false,
     "event_schema_version": "0.1",
-    "collector_url": null
+    "collector_url": "https://chinaflow-event-collector-v0-1-test.an13501112545.workers.dev/v1/events"
   },
 
   "rules": [
