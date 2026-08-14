@@ -25,6 +25,40 @@ const REQUIRED_STRING_FIELDS = [
   "config_version"
 ];
 
+const INSERT_EVENT_SQL = `
+INSERT OR IGNORE INTO events (
+  event_id,
+  event_schema_version,
+  event_type,
+  occurred_at,
+  publisher_id,
+  session_id,
+  page_url,
+  page_path,
+  page_title,
+  referrer,
+  routing_mode,
+  china_intent,
+  china_intent_score,
+  product_intent,
+  product_score,
+  routing_reason,
+  rule_id,
+  offer_id,
+  placement,
+  trip_sub1,
+  supplier,
+  destination_url,
+  engine_version,
+  config_version,
+  viewport_width,
+  viewport_height,
+  external_attribution_id
+)
+VALUES (
+  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)`;
+
 
 class PayloadTooLargeError extends Error {}
 
@@ -228,9 +262,93 @@ function isValidEvent(event) {
 }
 
 
+function toNullableString(value) {
+  return typeof value === "string"
+    ? value
+    : null;
+}
+
+
+function toNullableInteger(value) {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value)
+  )
+    ? Math.trunc(value)
+    : null;
+}
+
+
+function toNullableChinaIntent(value) {
+  if (value === true) {
+    return 1;
+  }
+
+  if (value === false) {
+    return 0;
+  }
+
+  return null;
+}
+
+
+function createEventBindings(event) {
+  return [
+    event.event_id,
+    event.event_schema_version,
+    event.event_type,
+    event.timestamp,
+    event.publisher_id,
+    event.session_id,
+    event.page_url,
+    toNullableString(event.page_path),
+    toNullableString(event.page_title),
+    toNullableString(event.referrer),
+    event.routing_mode,
+    toNullableChinaIntent(event.china_intent),
+    toNullableInteger(event.china_intent_score),
+    toNullableString(event.product_intent),
+    toNullableInteger(event.product_score),
+    toNullableString(event.routing_reason),
+    toNullableString(event.rule_id),
+    toNullableString(event.offer_id),
+    event.placement,
+    toNullableString(event.trip_sub1),
+    toNullableString(event.supplier),
+    event.destination_url,
+    event.engine_version,
+    event.config_version,
+    toNullableInteger(event.viewport_width),
+    toNullableInteger(event.viewport_height),
+    toNullableString(event.external_attribution_id)
+  ];
+}
+
+
+async function persistEvent(event, env) {
+  const database =
+    env && env.CHINAFLOW_EVENTS;
+
+  if (
+    !database ||
+    typeof database.prepare !== "function"
+  ) {
+    throw new Error(
+      "D1 binding unavailable"
+    );
+  }
+
+  await database
+    .prepare(INSERT_EVENT_SQL)
+    .bind(...createEventBindings(event))
+    .run();
+}
+
+
 async function handleEventPost(
   request,
-  origin
+  origin,
+  env
 ) {
   let bodyText;
 
@@ -272,11 +390,20 @@ async function handleEventPost(
     );
   }
 
+  await persistEvent(
+    event,
+    env
+  );
+
   console.log(
     "[ChinaFlow Event Collector v0.1-test]",
     {
-      event:
-        event
+      event_id:
+        event.event_id,
+      event_type:
+        event.event_type,
+      publisher_id:
+        event.publisher_id
     }
   );
 
@@ -287,7 +414,7 @@ async function handleEventPost(
 }
 
 
-async function handleRequest(request) {
+async function handleRequest(request, env) {
   const url =
     new URL(request.url);
   const origin =
@@ -324,15 +451,19 @@ async function handleRequest(request) {
 
   return handleEventPost(
     request,
-    origin
+    origin,
+    env
   );
 }
 
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     try {
-      return await handleRequest(request);
+      return await handleRequest(
+        request,
+        env
+      );
     } catch (error) {
       console.error(
         "[ChinaFlow Event Collector v0.1-test] Unexpected error"
