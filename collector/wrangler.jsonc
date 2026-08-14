@@ -1,0 +1,14 @@
+{
+  "name": "chinaflow-event-collector-v0-1-test",
+  "main": "worker-v0.1-test.js",
+  "compatibility_date": "2026-08-14",
+
+  "d1_databases": [
+    {
+      "binding": "CHINAFLOW_EVENTS",
+      "database_name": "chinaflow-events-v0-1-test",
+      "database_id": "f8c07a5f-f9e7-4595-9f25-ce3d525241d9",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
