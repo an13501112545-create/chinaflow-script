@@ -1,0 +1,74 @@
+{
+  "version": "0.5-event-test",
+  "publisher": "flightflex",
+
+  "analytics": {
+    "enabled": false,
+    "event_schema_version": "0.1",
+    "collector_url": null
+  },
+
+  "rules": [
+    {
+      "id": "flightflex-flights-yyz-bjs",
+      "rule_id": "flightflex-flights-yyz-bjs",
+      "enabled": true,
+      "match": {
+        "type": "path",
+        "value": "/flights"
+      },
+      "product": "flight",
+      "placement": "flightflex_flights_yyz_bjs_test",
+      "eyebrow": "FLIGHTFLEX RECOMMENDS",
+      "title": "Compare Toronto → Beijing Flights",
+      "subtitle": "Check fares and flight options on Trip.com",
+      "icon": "✈",
+      "url": "https://www.trip.com/flights/Toronto-to-Beijing/tickets-YTO-BJS?flighttype=S&dcity=YTO&acity=BJS&Allianceid=10021103&SID=328317298&trip_sub1=flightflex_flights_yyz_bjs_test&trip_sub3=D19214085"
+    },
+
+    {
+      "id": "flightflex-china-blog-hotels-generic",
+      "rule_id": "flightflex-china-blog-hotels-generic",
+      "enabled": true,
+      "match": {
+        "type": "path",
+        "value": "/post/china-inbound-tourism-growth-trend-2026-why-more-travelers-are-returning-to-china"
+      },
+      "product": "hotel",
+      "placement": "flightflex_blog_china_inbound_hotels_generic_test",
+      "eyebrow": "PLAN YOUR CHINA TRIP",
+      "title": "Find Hotels for Your China Trip",
+      "subtitle": "Compare hotel options and book your stay on Trip.com",
+      "icon": "▣",
+      "url": "https://www.trip.com/hotels?Allianceid=10021103&SID=328317298&trip_sub1=flightflex_blog_china_inbound_hotels_generic_test&trip_sub3=D19217690"
+    }
+  ],
+
+  "offers": [
+    {
+      "id": "china-hotels-generic",
+      "offer_id": "china-hotels-generic",
+      "enabled": true,
+      "product": "hotel",
+      "placement": "flightflex_auto_china_hotels_generic_test",
+      "eyebrow": "PLAN YOUR CHINA TRIP",
+      "title": "Find Hotels for Your China Trip",
+      "subtitle": "Compare hotel options and book your stay on Trip.com",
+      "icon": "▣",
+      "url": "https://www.trip.com/hotels?Allianceid=10021103&SID=328317298&trip_sub1=flightflex_auto_china_hotels_generic_test&trip_sub3=D19217690"
+    },
+
+    {
+      "id": "china-flights-generic",
+      "offer_id": "china-flights-generic",
+      "enabled": true,
+      "product": "flight",
+      "placement": "flightflex_auto_china_flights_generic_test",
+      "eyebrow": "PLAN YOUR CHINA TRIP",
+      "title": "Compare Flights for Your China Trip",
+      "subtitle": "Check flight options and fares on Trip.com",
+      "icon": "✈",
+      "url": "https://www.trip.com/flights?Allianceid=10021103&SID=328317298&trip_sub1=flightflex_auto_china_flights_generic_test&trip_sub3=D19217690"
+    }
+  ]
+}
