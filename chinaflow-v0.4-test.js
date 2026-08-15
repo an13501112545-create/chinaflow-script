@@ -951,6 +951,27 @@
   }
 
 
+  function readReferrerOrigin() {
+
+    try {
+
+      if (!document.referrer) {
+        return "";
+      }
+
+      return new URL(
+        document.referrer
+      ).origin;
+
+    } catch (error) {
+
+      return "";
+
+    }
+
+  }
+
+
   function buildEventPayload(
     eventType,
     route
@@ -999,7 +1020,8 @@
           sessionId,
 
         page_url:
-          window.location.href,
+          window.location.origin +
+          window.location.pathname,
 
         page_path:
           window.location.pathname,
@@ -1008,7 +1030,7 @@
           document.title || "",
 
         referrer:
-          document.referrer || "",
+          readReferrerOrigin(),
 
         routing_mode:
           route.routing_mode,
@@ -1081,13 +1103,6 @@
 
     try {
 
-      /*
-       * Test-only no-op transport.
-       * Replace only this function with the future beacon
-       * transport when the collector is ready.
-       * analytics.enabled intentionally does not gate local
-       * payload construction or console testing.
-       */
       const analyticsConfig =
         readAnalyticsConfig();
 
@@ -1095,12 +1110,48 @@
         "[ChinaFlow v0.4-test Event]",
         {
           transport:
-            "console_only",
+            analyticsConfig.enabled === true
+              ? "beacon"
+              : "disabled_test_only",
           analytics:
             analyticsConfig,
           event:
             payload
         }
+      );
+
+      if (
+        analyticsConfig.enabled !== true
+      ) {
+        return;
+      }
+
+      if (
+        typeof analyticsConfig.collector_url !==
+          "string" ||
+        analyticsConfig.collector_url.trim() === ""
+      ) {
+        return;
+      }
+
+      if (
+        typeof navigator === "undefined" ||
+        typeof navigator.sendBeacon !== "function"
+      ) {
+        return;
+      }
+
+      const blob = new Blob(
+        [JSON.stringify(payload)],
+        {
+          type:
+            "text/plain;charset=UTF-8"
+        }
+      );
+
+      navigator.sendBeacon(
+        analyticsConfig.collector_url,
+        blob
       );
 
     } catch (error) {
