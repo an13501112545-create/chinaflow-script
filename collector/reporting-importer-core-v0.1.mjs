@@ -576,3 +576,48 @@ export async function normalizeTripCommissionRow(row, context) {
       row?.ouid ?? null
   };
 }
+
+export async function preflightTripBookingRows(rows, context) {
+  const normalizedRows =
+    await Promise.all(
+      rows.map(
+        row =>
+          normalizeTripBookingRow(
+            row,
+            context
+          )
+      )
+    );
+
+  assertUniqueRecordKeys(
+    normalizedRows.map(
+      row =>
+        row.source_record_key
+    ),
+    "booking"
+  );
+
+  return normalizedRows;
+}
+export async function preflightTripCommissionRows(rows, context) {
+  const normalizedRows =
+    await Promise.all(
+      rows.map(
+        row =>
+          normalizeTripCommissionRow(
+            row,
+            context
+          )
+      )
+    );
+
+  assertUniqueRecordKeys(
+    normalizedRows.map(
+      row =>
+        row.commission_record_key
+    ),
+    "commission"
+  );
+
+  return normalizedRows;
+}

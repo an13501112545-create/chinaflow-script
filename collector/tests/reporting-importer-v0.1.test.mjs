@@ -637,3 +637,162 @@ test(
     assert.equal(normalized.ouid, "opaque-ouid-001");
   }
 );
+
+test(
+  "booking batch preflight normalizes all rows and rejects duplicate source_record_key before persistence",
+  async () => {
+    const {
+      preflightTripBookingRows
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const context = {
+      source: "trip.com",
+      aid: "10021103",
+      matchedPlacement: {
+        publisher_id: "flightflex",
+        placement: "flightflex_flights_yyz_bjs_test"
+      }
+    };
+
+    const uniqueRows = [
+      {
+        orderId: "BOOKING-001",
+        sid: "123456",
+        productLine: "htl",
+        orderStatus: "S",
+        amount: "123.45",
+        currency: "CAD",
+        tripSub1: "flightflex_flights_yyz_bjs_test"
+      },
+      {
+        orderId: "BOOKING-002",
+        sid: "123456",
+        productLine: "htl",
+        orderStatus: "S",
+        amount: "200.00",
+        currency: "CAD",
+        tripSub1: "flightflex_flights_yyz_bjs_test"
+      }
+    ];
+
+    const normalized =
+      await preflightTripBookingRows(
+        uniqueRows,
+        context
+      );
+
+    assert.equal(normalized.length, 2);
+
+    assert.match(
+      normalized[0].source_record_key,
+      /^[0-9a-f]{64}$/
+    );
+
+    assert.notEqual(
+      normalized[0].source_record_key,
+      normalized[1].source_record_key
+    );
+
+    await assert.rejects(
+      () =>
+        preflightTripBookingRows(
+          [
+            uniqueRows[0],
+            {
+              ...uniqueRows[0],
+              amount: "999.99",
+              orderStatus: "Q"
+            }
+          ],
+          context
+        ),
+      /Duplicate booking record key:/
+    );
+  }
+);
+test(
+  "commission batch preflight normalizes all rows and rejects duplicate commission_record_key before persistence",
+  async () => {
+    const {
+      preflightTripCommissionRows
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const context = {
+      source: "trip.com",
+      aid: "10021103",
+      matchedPlacement: {
+        publisher_id: "flightflex",
+        placement: "flightflex_flights_yyz_bjs_test"
+      }
+    };
+
+    const uniqueRows = [
+      {
+        orderId: "BOOKING-001",
+        sid: "123456",
+        commissionMonth: "2026-08",
+        productLine: "htl",
+        subOrderType: "hotel",
+        planType: "standard",
+        orderStatus: "S",
+        commissionStatus: "SETTLED",
+        bookingAmount: "123.45",
+        commissionAmount: "6.17",
+        currency: "CAD",
+        tripSub1: "flightflex_flights_yyz_bjs_test"
+      },
+      {
+        orderId: "BOOKING-002",
+        sid: "123456",
+        commissionMonth: "2026-08",
+        productLine: "htl",
+        subOrderType: "hotel",
+        planType: "standard",
+        orderStatus: "S",
+        commissionStatus: "SETTLED",
+        bookingAmount: "200.00",
+        commissionAmount: "10.00",
+        currency: "CAD",
+        tripSub1: "flightflex_flights_yyz_bjs_test"
+      }
+    ];
+
+    const normalized =
+      await preflightTripCommissionRows(
+        uniqueRows,
+        context
+      );
+
+    assert.equal(normalized.length, 2);
+
+    assert.match(
+      normalized[0].commission_record_key,
+      /^[0-9a-f]{64}$/
+    );
+
+    assert.notEqual(
+      normalized[0].commission_record_key,
+      normalized[1].commission_record_key
+    );
+
+    await assert.rejects(
+      () =>
+        preflightTripCommissionRows(
+          [
+            uniqueRows[0],
+            {
+              ...uniqueRows[0],
+              commissionAmount: "9.99",
+              commissionStatus: "UNDER_REVIEW"
+            }
+          ],
+          context
+        ),
+      /Duplicate commission record key:/
+    );
+  }
+);
