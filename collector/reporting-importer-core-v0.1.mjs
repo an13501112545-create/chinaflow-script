@@ -621,3 +621,62 @@ export async function preflightTripCommissionRows(rows, context) {
 
   return normalizedRows;
 }
+
+export async function createSourceFileSha256(bytes) {
+  const digest =
+    await crypto.subtle.digest(
+      "SHA-256",
+      bytes
+    );
+
+  return Array
+    .from(new Uint8Array(digest))
+    .map(
+      byte =>
+        byte
+          .toString(16)
+          .padStart(2, "0")
+    )
+    .join("");
+}
+export async function createIngestionRunPreflight(input) {
+  if (
+    typeof input?.source !== "string" ||
+    input.source.trim().length === 0
+  ) {
+    throw new Error(
+      "Missing ingestion field: source"
+    );
+  }
+
+  if (
+    typeof input?.report_type !== "string" ||
+    input.report_type.trim().length === 0
+  ) {
+    throw new Error(
+      "Missing ingestion field: report_type"
+    );
+  }
+
+  const sourceFileSha256 =
+    await createSourceFileSha256(
+      input?.file_bytes
+    );
+
+  return {
+    source:
+      input?.source,
+    report_type:
+      input?.report_type,
+    source_filename:
+      input?.source_filename ?? null,
+    report_period_from:
+      input?.report_period_from ?? null,
+    report_period_to:
+      input?.report_period_to ?? null,
+    source_file_sha256:
+      sourceFileSha256,
+    rows_seen:
+      input?.rows_seen
+  };
+}

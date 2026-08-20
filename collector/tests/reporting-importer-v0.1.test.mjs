@@ -796,3 +796,126 @@ test(
     );
   }
 );
+
+test(
+  "source file SHA-256 hashes exact raw bytes for ingestion dedupe",
+  async () => {
+    const {
+      createSourceFileSha256
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const lfBytes =
+      new TextEncoder().encode(
+        "trip-report-v0.1\n"
+      );
+
+    const crlfBytes =
+      new TextEncoder().encode(
+        "trip-report-v0.1\r\n"
+      );
+
+    const lfHash =
+      await createSourceFileSha256(
+        lfBytes
+      );
+
+    const crlfHash =
+      await createSourceFileSha256(
+        crlfBytes
+      );
+
+    assert.equal(
+      lfHash,
+      "0514db9bf331a6ae64526645e759c694f5fce092a6e16aaea4c05bb2242d043b"
+    );
+
+    assert.notEqual(
+      lfHash,
+      crlfHash
+    );
+
+    assert.match(
+      crlfHash,
+      /^[0-9a-f]{64}$/
+    );
+  }
+);
+test(
+  "ingestion run preflight builds audit metadata from exact source file bytes",
+  async () => {
+    const {
+      createIngestionRunPreflight
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const fileBytes =
+      new TextEncoder().encode(
+        "trip-report-v0.1\n"
+      );
+
+    const preflight =
+      await createIngestionRunPreflight({
+        source: "trip.com",
+        report_type: "booking",
+        source_filename: "booking-report.csv",
+        report_period_from: "2026-08-01",
+        report_period_to: "2026-08-20",
+        file_bytes: fileBytes,
+        rows_seen: 2
+      });
+
+    assert.deepEqual(
+      preflight,
+      {
+        source: "trip.com",
+        report_type: "booking",
+        source_filename: "booking-report.csv",
+        report_period_from: "2026-08-01",
+        report_period_to: "2026-08-20",
+        source_file_sha256:
+          "0514db9bf331a6ae64526645e759c694f5fce092a6e16aaea4c05bb2242d043b",
+        rows_seen: 2
+      }
+    );
+  }
+);
+test(
+  "ingestion run preflight rejects missing source and report_type before persistence",
+  async () => {
+    const {
+      createIngestionRunPreflight
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const fileBytes =
+      new TextEncoder().encode(
+        "trip-report-v0.1\n"
+      );
+
+    await assert.rejects(
+      () =>
+        createIngestionRunPreflight({
+          source: "   ",
+          report_type: "booking",
+          file_bytes: fileBytes,
+          rows_seen: 1
+        }),
+      /Missing ingestion field: source/
+    );
+
+    await assert.rejects(
+      () =>
+        createIngestionRunPreflight({
+          source: "trip.com",
+          report_type: "",
+          file_bytes: fileBytes,
+          rows_seen: 1
+        }),
+      /Missing ingestion field: report_type/
+    );
+  }
+);
