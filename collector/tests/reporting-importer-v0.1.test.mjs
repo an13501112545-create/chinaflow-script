@@ -370,3 +370,270 @@ test(
     );
   }
 );
+
+test(
+  "Trip.com booking row normalization builds persistence-ready booking facts",
+  async () => {
+    const {
+      normalizeTripBookingRow
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const normalized =
+      await normalizeTripBookingRow(
+        {
+          orderId: "BOOKING-001",
+          sid: "123456",
+          sidName: "FlightFlex",
+          productLine: "htl",
+          orderStatus: "S",
+          amount: "123.45",
+          currency: "CAD",
+          orderDate: "2026-08-19 10:30:00",
+          productStartDate: "2026-09-01",
+          productEndDate: "2026-09-03",
+          bookingWindow: "13",
+          departureCity: "Toronto",
+          departureCountry: "Canada",
+          arrivalCity: "Beijing",
+          arrivalCountry: "China",
+          orderPlatform: "Web",
+          region: "CA",
+          ouid: "opaque-ouid-001",
+          tripSub1: "flightflex_flights_yyz_bjs_test",
+          tripSub3: "campaign-a"
+        },
+        {
+          source: "trip.com",
+          aid: "10021103",
+          matchedPlacement: {
+            publisher_id: "flightflex",
+            placement: "flightflex_flights_yyz_bjs_test"
+          }
+        }
+      );
+
+    assert.equal(
+      normalized.source_record_key,
+      "44d7a7aed728d2fe31d30beaab36d69d6ce4e476e261320ebf29bd26cfe3e86f"
+    );
+
+    assert.equal(normalized.source, "trip.com");
+    assert.equal(normalized.source_order_id, "BOOKING-001");
+    assert.equal(normalized.aid, "10021103");
+    assert.equal(normalized.sid, "123456");
+    assert.equal(normalized.sid_name, "FlightFlex");
+
+    assert.equal(normalized.trip_sub1, "flightflex_flights_yyz_bjs_test");
+    assert.equal(normalized.trip_sub3, "campaign-a");
+    assert.equal(normalized.attributed_publisher_id, "flightflex");
+    assert.equal(normalized.attributed_placement, "flightflex_flights_yyz_bjs_test");
+    assert.equal(normalized.attribution_status, "matched");
+
+    assert.equal(normalized.raw_product_line, "htl");
+    assert.equal(normalized.normalized_product, "hotel");
+    assert.equal(normalized.raw_order_status, "S");
+    assert.equal(normalized.normalized_order_status, "successful");
+
+    assert.equal(normalized.booking_amount_raw, "123.45");
+    assert.equal(normalized.booking_amount_micros, 123450000);
+    assert.equal(normalized.currency, "CAD");
+
+    assert.equal(normalized.order_date, "2026-08-19 10:30:00");
+    assert.equal(normalized.product_start_date, "2026-09-01");
+    assert.equal(normalized.product_end_date, "2026-09-03");
+    assert.equal(normalized.booking_window, "13");
+
+    assert.equal(normalized.departure_city, "Toronto");
+    assert.equal(normalized.departure_country, "Canada");
+    assert.equal(normalized.arrival_city, "Beijing");
+    assert.equal(normalized.arrival_country, "China");
+    assert.equal(normalized.order_platform, "Web");
+    assert.equal(normalized.booker_region, "CA");
+    assert.equal(normalized.ouid, "opaque-ouid-001");
+  }
+);
+test(
+  "source row hash is deterministic across object key order and changes when row content changes",
+  async () => {
+    const {
+      createSourceRowHash
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const rowA = {
+      orderId: "BOOKING-001",
+      productLine: "htl",
+      orderStatus: "S",
+      amount: "123.45"
+    };
+
+    const rowB = {
+      amount: "123.45",
+      orderStatus: "S",
+      productLine: "htl",
+      orderId: "BOOKING-001"
+    };
+
+    const rowChanged = {
+      orderId: "BOOKING-001",
+      productLine: "htl",
+      orderStatus: "Q",
+      amount: "123.45"
+    };
+
+    const hashA =
+      await createSourceRowHash(rowA);
+
+    const hashB =
+      await createSourceRowHash(rowB);
+
+    const hashChanged =
+      await createSourceRowHash(rowChanged);
+
+    assert.equal(hashA, hashB);
+    assert.notEqual(hashA, hashChanged);
+
+    assert.match(
+      hashA,
+      /^[0-9a-f]{64}$/
+    );
+  }
+);
+test(
+  "Trip.com booking row normalization includes source_row_hash derived from the raw source row",
+  async () => {
+    const {
+      normalizeTripBookingRow,
+      createSourceRowHash
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const row = {
+      orderId: "BOOKING-001",
+      sid: "123456",
+      sidName: "FlightFlex",
+      productLine: "htl",
+      orderStatus: "S",
+      amount: "123.45",
+      currency: "CAD",
+      tripSub1: "flightflex_flights_yyz_bjs_test"
+    };
+
+    const normalized =
+      await normalizeTripBookingRow(
+        row,
+        {
+          source: "trip.com",
+          aid: "10021103",
+          matchedPlacement: {
+            publisher_id: "flightflex",
+            placement: "flightflex_flights_yyz_bjs_test"
+          }
+        }
+      );
+
+    assert.equal(
+      normalized.source_row_hash,
+      await createSourceRowHash(row)
+    );
+
+    assert.match(
+      normalized.source_row_hash,
+      /^[0-9a-f]{64}$/
+    );
+  }
+);
+test(
+  "Trip.com commission row normalization builds persistence-ready commission facts",
+  async () => {
+    const {
+      normalizeTripCommissionRow
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const row = {
+      orderId: "BOOKING-001",
+      sid: "123456",
+      sidName: "FlightFlex",
+      commissionMonth: "2026-08",
+      productLine: "htl",
+      subOrderType: "hotel",
+      planType: "standard",
+      orderStatus: "S",
+      commissionStatus: "SETTLED",
+      bookingAmount: "123.45",
+      commissionAmount: "6.17",
+      currency: "CAD",
+      orderDate: "2026-08-19 10:30:00",
+      checkOutOrIssueDate: "2026-09-03",
+      ratio: "0.05",
+      region: "CA",
+      ouid: "opaque-ouid-001",
+      tripSub1: "flightflex_flights_yyz_bjs_test",
+      tripSub3: "campaign-a"
+    };
+
+    const normalized =
+      await normalizeTripCommissionRow(
+        row,
+        {
+          source: "trip.com",
+          aid: "10021103",
+          matchedPlacement: {
+            publisher_id: "flightflex",
+            placement: "flightflex_flights_yyz_bjs_test"
+          }
+        }
+      );
+
+    assert.equal(
+      normalized.commission_record_key,
+      "6a65817055252ed4cda18518b4e88db95a96ec289dd60849785ac00865a47c97"
+    );
+
+    assert.match(
+      normalized.source_row_hash,
+      /^[0-9a-f]{64}$/
+    );
+
+    assert.equal(normalized.source, "trip.com");
+    assert.equal(normalized.source_order_id, "BOOKING-001");
+    assert.equal(normalized.aid, "10021103");
+    assert.equal(normalized.sid, "123456");
+    assert.equal(normalized.sid_name, "FlightFlex");
+
+    assert.equal(normalized.trip_sub1, "flightflex_flights_yyz_bjs_test");
+    assert.equal(normalized.trip_sub3, "campaign-a");
+    assert.equal(normalized.attributed_publisher_id, "flightflex");
+    assert.equal(normalized.attributed_placement, "flightflex_flights_yyz_bjs_test");
+    assert.equal(normalized.attribution_status, "matched");
+
+    assert.equal(normalized.raw_product_line, "htl");
+    assert.equal(normalized.normalized_product, "hotel");
+    assert.equal(normalized.sub_order_type, "hotel");
+    assert.equal(normalized.plan_type, "standard");
+
+    assert.equal(normalized.raw_order_status, "S");
+    assert.equal(normalized.normalized_order_status, "successful");
+    assert.equal(normalized.raw_commission_status, "SETTLED");
+    assert.equal(normalized.normalized_commission_status, "settled");
+
+    assert.equal(normalized.booking_amount_raw, "123.45");
+    assert.equal(normalized.booking_amount_micros, 123450000);
+    assert.equal(normalized.commission_amount_raw, "6.17");
+    assert.equal(normalized.commission_amount_micros, 6170000);
+    assert.equal(normalized.currency, "CAD");
+
+    assert.equal(normalized.commission_month, "2026-08");
+    assert.equal(normalized.order_date, "2026-08-19 10:30:00");
+    assert.equal(normalized.check_out_or_issue_date, "2026-09-03");
+    assert.equal(normalized.ratio_raw, "0.05");
+    assert.equal(normalized.region, "CA");
+    assert.equal(normalized.ouid, "opaque-ouid-001");
+  }
+);

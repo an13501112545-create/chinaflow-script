@@ -296,3 +296,283 @@ export function assertUniqueRecordKeys(
     seen.add(recordKey);
   }
 }
+
+export async function normalizeTripBookingRow(row, context) {
+  const source =
+    context?.source;
+
+  const aid =
+    context?.aid;
+
+  const sourceOrderId =
+    row?.orderId;
+
+  const sid =
+    row?.sid;
+
+  const product =
+    normalizeTripProductLine(
+      row?.productLine
+    );
+
+  const orderStatus =
+    normalizeTripOrderStatus(
+      row?.orderStatus
+    );
+
+  const amount =
+    normalizeMoneyField(
+      row?.amount
+    );
+
+  const attribution =
+    resolveTripSub1Attribution(
+      row?.tripSub1,
+      context?.matchedPlacement
+    );
+
+  const sourceRecordKey =
+    await createBookingRecordKey({
+      source,
+      aid,
+      sid,
+      source_order_id: sourceOrderId,
+      raw_product_line: product.raw
+    });
+
+  const sourceRowHash =
+    await createSourceRowHash(row);
+
+  return {
+    source_record_key:
+      sourceRecordKey,
+    source_row_hash:
+      sourceRowHash,
+
+    source,
+    source_order_id:
+      sourceOrderId,
+    aid,
+    sid,
+    sid_name:
+      row?.sidName ?? null,
+
+    trip_sub1:
+      row?.tripSub1 ?? null,
+    trip_sub3:
+      row?.tripSub3 ?? null,
+
+    ...attribution,
+
+    raw_product_line:
+      product.raw,
+    normalized_product:
+      product.normalized,
+
+    raw_order_status:
+      orderStatus.raw,
+    normalized_order_status:
+      orderStatus.normalized,
+
+    booking_amount_raw:
+      amount.raw,
+    booking_amount_micros:
+      amount.micros,
+    currency:
+      normalizeCurrency(
+        row?.currency
+      ),
+
+    order_date:
+      row?.orderDate ?? null,
+    product_start_date:
+      row?.productStartDate ?? null,
+    product_end_date:
+      row?.productEndDate ?? null,
+    booking_window:
+      row?.bookingWindow ?? null,
+
+    departure_city:
+      row?.departureCity ?? null,
+    departure_country:
+      row?.departureCountry ?? null,
+    arrival_city:
+      row?.arrivalCity ?? null,
+    arrival_country:
+      row?.arrivalCountry ?? null,
+
+    order_platform:
+      row?.orderPlatform ?? null,
+    booker_region:
+      row?.region ?? null,
+    ouid:
+      row?.ouid ?? null
+  };
+}
+function canonicalizeForHash(value) {
+  if (Array.isArray(value)) {
+    return value.map(
+      item =>
+        canonicalizeForHash(item)
+    );
+  }
+
+  if (
+    value !== null &&
+    typeof value === "object"
+  ) {
+    const canonical = {};
+
+    for (
+      const key of
+        Object.keys(value).sort()
+    ) {
+      canonical[key] =
+        canonicalizeForHash(
+          value[key]
+        );
+    }
+
+    return canonical;
+  }
+
+  return value;
+}
+
+export async function createSourceRowHash(row) {
+  return sha256Hex(
+    JSON.stringify(
+      canonicalizeForHash(row)
+    )
+  );
+}
+export async function normalizeTripCommissionRow(row, context) {
+  const source =
+    context?.source;
+
+  const aid =
+    context?.aid;
+
+  const sourceOrderId =
+    row?.orderId;
+
+  const sid =
+    row?.sid;
+
+  const product =
+    normalizeTripProductLine(
+      row?.productLine
+    );
+
+  const orderStatus =
+    normalizeTripOrderStatus(
+      row?.orderStatus
+    );
+
+  const commissionStatus =
+    normalizeTripCommissionStatus(
+      row?.commissionStatus
+    );
+
+  const bookingAmount =
+    normalizeMoneyField(
+      row?.bookingAmount
+    );
+
+  const commissionAmount =
+    normalizeMoneyField(
+      row?.commissionAmount
+    );
+
+  const attribution =
+    resolveTripSub1Attribution(
+      row?.tripSub1,
+      context?.matchedPlacement
+    );
+
+  const commissionRecordKey =
+    await createCommissionRecordKey({
+      source,
+      aid,
+      sid,
+      source_order_id: sourceOrderId,
+      commission_month: row?.commissionMonth,
+      raw_product_line: product.raw,
+      sub_order_type: row?.subOrderType,
+      plan_type: row?.planType
+    });
+
+  const sourceRowHash =
+    await createSourceRowHash(row);
+
+  return {
+    commission_record_key:
+      commissionRecordKey,
+    source_row_hash:
+      sourceRowHash,
+
+    source,
+    source_order_id:
+      sourceOrderId,
+    aid,
+    sid,
+    sid_name:
+      row?.sidName ?? null,
+
+    trip_sub1:
+      row?.tripSub1 ?? null,
+    trip_sub3:
+      row?.tripSub3 ?? null,
+
+    ...attribution,
+
+    raw_product_line:
+      product.raw,
+    normalized_product:
+      product.normalized,
+
+    sub_order_type:
+      row?.subOrderType ?? null,
+    plan_type:
+      row?.planType ?? null,
+
+    raw_order_status:
+      orderStatus.raw,
+    normalized_order_status:
+      orderStatus.normalized,
+
+    raw_commission_status:
+      commissionStatus.raw,
+    normalized_commission_status:
+      commissionStatus.normalized,
+
+    booking_amount_raw:
+      bookingAmount.raw,
+    booking_amount_micros:
+      bookingAmount.micros,
+
+    commission_amount_raw:
+      commissionAmount.raw,
+    commission_amount_micros:
+      commissionAmount.micros,
+
+    currency:
+      normalizeCurrency(
+        row?.currency
+      ),
+
+    commission_month:
+      row?.commissionMonth ?? null,
+    order_date:
+      row?.orderDate ?? null,
+    check_out_or_issue_date:
+      row?.checkOutOrIssueDate ?? null,
+
+    ratio_raw:
+      row?.ratio ?? null,
+    region:
+      row?.region ?? null,
+    ouid:
+      row?.ouid ?? null
+  };
+}
