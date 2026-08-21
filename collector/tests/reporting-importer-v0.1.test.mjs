@@ -3136,3 +3136,499 @@ test(
     }
   }
 );
+
+test(
+  "observation metadata: insert returns all five metadata fields",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planCurrentStateObservationMetadata(
+        {
+          state_action: "insert",
+          existing_fact_id: null
+        },
+        {
+          ingestion_run_id: "run-001",
+          observed_at: "2026-08-21T22:00:00.000Z"
+        }
+      ),
+      {
+        first_seen_at: "2026-08-21T22:00:00.000Z",
+        last_seen_at: "2026-08-21T22:00:00.000Z",
+        first_ingestion_run_id: "run-001",
+        last_ingestion_run_id: "run-001",
+        source_ingested_at: "2026-08-21T22:00:00.000Z"
+      }
+    );
+  }
+);
+
+test(
+  "observation metadata: insert first_seen_at equals last_seen_at",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCurrentStateObservationMetadata(
+        {
+          state_action: "insert",
+          existing_fact_id: null
+        },
+        {
+          ingestion_run_id: "run-001",
+          observed_at: "2026-08-21T22:00:00.000Z"
+        }
+      );
+
+    assert.equal(result.first_seen_at, result.last_seen_at);
+  }
+);
+
+test(
+  "observation metadata: insert first_ingestion_run_id equals last_ingestion_run_id",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCurrentStateObservationMetadata(
+        {
+          state_action: "insert",
+          existing_fact_id: null
+        },
+        {
+          ingestion_run_id: "run-001",
+          observed_at: "2026-08-21T22:00:00.000Z"
+        }
+      );
+
+    assert.equal(
+      result.first_ingestion_run_id,
+      result.last_ingestion_run_id
+    );
+  }
+);
+
+test(
+  "observation metadata: update returns exactly latest-observation fields",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planCurrentStateObservationMetadata(
+        {
+          state_action: "update",
+          existing_fact_id: "fact-1"
+        },
+        {
+          ingestion_run_id: "run-002",
+          observed_at: "2026-08-21T23:00:00.000Z"
+        }
+      ),
+      {
+        last_seen_at: "2026-08-21T23:00:00.000Z",
+        last_ingestion_run_id: "run-002",
+        source_ingested_at: "2026-08-21T23:00:00.000Z"
+      }
+    );
+  }
+);
+
+test(
+  "observation metadata: update omits first-observation fields",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCurrentStateObservationMetadata(
+        {
+          state_action: "update",
+          existing_fact_id: "fact-1"
+        },
+        {
+          ingestion_run_id: "run-002",
+          observed_at: "2026-08-21T23:00:00.000Z"
+        }
+      );
+
+    assert.equal("first_seen_at" in result, false);
+    assert.equal("first_ingestion_run_id" in result, false);
+  }
+);
+
+test(
+  "observation metadata: unchanged uses same shape as update",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planCurrentStateObservationMetadata(
+        {
+          state_action: "unchanged",
+          existing_fact_id: "fact-1"
+        },
+        {
+          ingestion_run_id: "run-003",
+          observed_at: "2026-08-22T00:00:00.000Z"
+        }
+      ),
+      {
+        last_seen_at: "2026-08-22T00:00:00.000Z",
+        last_ingestion_run_id: "run-003",
+        source_ingested_at: "2026-08-22T00:00:00.000Z"
+      }
+    );
+  }
+);
+
+test(
+  "observation metadata: unchanged omits first-observation fields",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCurrentStateObservationMetadata(
+        {
+          state_action: "unchanged",
+          existing_fact_id: "fact-1"
+        },
+        {
+          ingestion_run_id: "run-003",
+          observed_at: "2026-08-22T00:00:00.000Z"
+        }
+      );
+
+    assert.equal("first_seen_at" in result, false);
+    assert.equal("first_ingestion_run_id" in result, false);
+  }
+);
+
+test(
+  "observation metadata: source_ingested_at equals observed_at for every action",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const observedAt = "2026-08-21T22:30:00.000Z";
+
+    for (const state_action of [
+      "insert",
+      "update",
+      "unchanged"
+    ]) {
+      const result =
+        planCurrentStateObservationMetadata(
+          {
+            state_action,
+            existing_fact_id: null
+          },
+          {
+            ingestion_run_id: "run-001",
+            observed_at: observedAt
+          }
+        );
+
+      assert.equal(result.source_ingested_at, observedAt);
+    }
+  }
+);
+
+test(
+  "observation metadata: ingestion_run_id with spaces is preserved exactly",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCurrentStateObservationMetadata(
+        {
+          state_action: "insert",
+          existing_fact_id: null
+        },
+        {
+          ingestion_run_id: " run-001 ",
+          observed_at: "2026-08-21T22:00:00.000Z"
+        }
+      );
+
+    assert.equal(result.first_ingestion_run_id, " run-001 ");
+    assert.equal(result.last_ingestion_run_id, " run-001 ");
+  }
+);
+
+test(
+  "observation metadata: observed_at with spaces is preserved exactly",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCurrentStateObservationMetadata(
+        {
+          state_action: "insert",
+          existing_fact_id: null
+        },
+        {
+          ingestion_run_id: "run-001",
+          observed_at: " 2026-08-21T22:00:00.000Z "
+        }
+      );
+
+    assert.equal(
+      result.first_seen_at,
+      " 2026-08-21T22:00:00.000Z "
+    );
+    assert.equal(
+      result.last_seen_at,
+      " 2026-08-21T22:00:00.000Z "
+    );
+    assert.equal(
+      result.source_ingested_at,
+      " 2026-08-21T22:00:00.000Z "
+    );
+  }
+);
+
+test(
+  "observation metadata: invalid ingestion_run_id throws",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const ingestionRunId of [
+      undefined,
+      null,
+      "",
+      "   ",
+      123
+    ]) {
+      assert.throws(
+        () =>
+          planCurrentStateObservationMetadata(
+            {
+              state_action: "insert",
+              existing_fact_id: null
+            },
+            {
+              ingestion_run_id: ingestionRunId,
+              observed_at: "2026-08-21T22:00:00.000Z"
+            }
+          ),
+        /Invalid observation context: ingestion_run_id/
+      );
+    }
+  }
+);
+
+test(
+  "observation metadata: invalid observed_at throws",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const observedAt of [
+      undefined,
+      null,
+      "",
+      "   ",
+      123
+    ]) {
+      assert.throws(
+        () =>
+          planCurrentStateObservationMetadata(
+            {
+              state_action: "insert",
+              existing_fact_id: null
+            },
+            {
+              ingestion_run_id: "run-001",
+              observed_at: observedAt
+            }
+          ),
+        /Invalid observation context: observed_at/
+      );
+    }
+  }
+);
+
+test(
+  "observation metadata: null statePlan throws",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planCurrentStateObservationMetadata(
+          null,
+          {
+            ingestion_run_id: "run-001",
+            observed_at: "2026-08-21T22:00:00.000Z"
+          }
+        ),
+      /Invalid current-state observation plan/
+    );
+  }
+);
+
+test(
+  "observation metadata: array statePlan throws",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planCurrentStateObservationMetadata(
+          [],
+          {
+            ingestion_run_id: "run-001",
+            observed_at: "2026-08-21T22:00:00.000Z"
+          }
+        ),
+      /Invalid current-state observation plan/
+    );
+  }
+);
+
+test(
+  "observation metadata: unknown state_action throws",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const stateAction of [
+      "INSERT",
+      "UPDATE",
+      "UNCHANGED",
+      "delete",
+      "",
+      undefined
+    ]) {
+      assert.throws(
+        () =>
+          planCurrentStateObservationMetadata(
+            {
+              state_action: stateAction,
+              existing_fact_id: null
+            },
+            {
+              ingestion_run_id: "run-001",
+              observed_at: "2026-08-21T22:00:00.000Z"
+            }
+          ),
+        /Invalid current-state observation plan/
+      );
+    }
+  }
+);
+
+test(
+  "observation metadata: does not mutate statePlan or context",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const statePlan = {
+      state_action: "insert",
+      existing_fact_id: null
+    };
+
+    const context = {
+      ingestion_run_id: "run-001",
+      observed_at: "2026-08-21T22:00:00.000Z"
+    };
+
+    const statePlanBefore = JSON.stringify(statePlan);
+    const contextBefore = JSON.stringify(context);
+
+    planCurrentStateObservationMetadata(statePlan, context);
+
+    assert.equal(JSON.stringify(statePlan), statePlanBefore);
+    assert.equal(JSON.stringify(context), contextBefore);
+  }
+);
+
+test(
+  "observation metadata: repeated identical inputs produce deep-equal outputs",
+  async () => {
+    const {
+      planCurrentStateObservationMetadata
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const statePlan = {
+      state_action: "update",
+      existing_fact_id: "fact-1"
+    };
+
+    const context = {
+      ingestion_run_id: "run-002",
+      observed_at: "2026-08-21T23:00:00.000Z"
+    };
+
+    const first =
+      planCurrentStateObservationMetadata(statePlan, context);
+    const second =
+      planCurrentStateObservationMetadata(statePlan, context);
+
+    assert.deepEqual(first, second);
+    assert.notEqual(first, second);
+  }
+);

@@ -1063,3 +1063,53 @@ export function planCommissionCurrentState(normalizedRow, existingFact) {
       existingFact.commission_fact_id
   };
 }
+
+export function planCurrentStateObservationMetadata(statePlan, context) {
+  if (
+    statePlan === null ||
+    typeof statePlan !== "object" ||
+    Array.isArray(statePlan)
+  ) {
+    throw new Error(
+      "Invalid current-state observation plan"
+    );
+  }
+
+  if (
+    statePlan.state_action !== "insert" &&
+    statePlan.state_action !== "update" &&
+    statePlan.state_action !== "unchanged"
+  ) {
+    throw new Error(
+      "Invalid current-state observation plan"
+    );
+  }
+
+  if (!isNonNullString(context?.ingestion_run_id)) {
+    throw new Error(
+      "Invalid observation context: ingestion_run_id"
+    );
+  }
+
+  if (!isNonNullString(context?.observed_at)) {
+    throw new Error(
+      "Invalid observation context: observed_at"
+    );
+  }
+
+  if (statePlan.state_action === "insert") {
+    return {
+      first_seen_at: context.observed_at,
+      last_seen_at: context.observed_at,
+      first_ingestion_run_id: context.ingestion_run_id,
+      last_ingestion_run_id: context.ingestion_run_id,
+      source_ingested_at: context.observed_at
+    };
+  }
+
+  return {
+    last_seen_at: context.observed_at,
+    last_ingestion_run_id: context.ingestion_run_id,
+    source_ingested_at: context.observed_at
+  };
+}
