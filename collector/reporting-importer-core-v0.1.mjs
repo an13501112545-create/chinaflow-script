@@ -297,6 +297,77 @@ export function assertUniqueRecordKeys(
   }
 }
 
+export function buildTripSub1PlacementMap(placementRows) {
+  if (!Array.isArray(placementRows)) {
+    throw new Error(
+      "Invalid publisher placement rows"
+    );
+  }
+
+  const map =
+    new Map();
+
+  for (const row of placementRows) {
+    if (row?.supplier !== "trip.com") {
+      throw new Error(
+        "Invalid publisher placement candidate: supplier"
+      );
+    }
+
+    if (row?.is_active !== 1) {
+      throw new Error(
+        "Invalid publisher placement candidate: is_active"
+      );
+    }
+
+    if (
+      typeof row?.external_tracking_key !== "string" ||
+      row.external_tracking_key.trim().length === 0
+    ) {
+      throw new Error(
+        "Invalid publisher placement candidate: external_tracking_key"
+      );
+    }
+
+    if (
+      typeof row?.publisher_id !== "string" ||
+      row.publisher_id.trim().length === 0
+    ) {
+      throw new Error(
+        "Invalid publisher placement candidate: publisher_id"
+      );
+    }
+
+    if (
+      typeof row?.placement !== "string" ||
+      row.placement.trim().length === 0
+    ) {
+      throw new Error(
+        "Invalid publisher placement candidate: placement"
+      );
+    }
+
+    const key =
+      row.external_tracking_key;
+
+    if (map.has(key)) {
+      throw new Error(
+        `Duplicate publisher placement tracking key: ${key}`
+      );
+    }
+
+    map.set(
+      key,
+      {
+        publisher_id: row.publisher_id,
+        placement: row.placement
+      }
+    );
+  }
+
+  return map;
+}
+
 export async function normalizeTripBookingRow(row, context) {
   const source =
     context?.source;

@@ -1690,3 +1690,569 @@ test(
     );
   }
 );
+
+test(
+  "placement map builds empty Map from empty array",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const map =
+      buildTripSub1PlacementMap([]);
+
+    assert.ok(map instanceof Map);
+    assert.equal(map.size, 0);
+  }
+);
+
+test(
+  "placement map builds a single correct mapping",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const map =
+      buildTripSub1PlacementMap([
+        {
+          supplier: "trip.com",
+          is_active: 1,
+          external_tracking_key:
+            "flightflex_flights_yyz_bjs_test",
+          publisher_id: "flightflex",
+          placement:
+            "flightflex_flights_yyz_bjs_test"
+        }
+      ]);
+
+    assert.equal(map.size, 1);
+    assert.deepEqual(
+      map.get(
+        "flightflex_flights_yyz_bjs_test"
+      ),
+      {
+        publisher_id: "flightflex",
+        placement:
+          "flightflex_flights_yyz_bjs_test"
+      }
+    );
+  }
+);
+
+test(
+  "placement map builds multiple mappings",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const map =
+      buildTripSub1PlacementMap([
+        {
+          supplier: "trip.com",
+          is_active: 1,
+          external_tracking_key: "key-a",
+          publisher_id: "publisher-a",
+          placement: "placement-a"
+        },
+        {
+          supplier: "trip.com",
+          is_active: 1,
+          external_tracking_key: "key-b",
+          publisher_id: "publisher-b",
+          placement: "placement-b"
+        }
+      ]);
+
+    assert.equal(map.size, 2);
+    assert.deepEqual(
+      map.get("key-a"),
+      {
+        publisher_id: "publisher-a",
+        placement: "placement-a"
+      }
+    );
+    assert.deepEqual(
+      map.get("key-b"),
+      {
+        publisher_id: "publisher-b",
+        placement: "placement-b"
+      }
+    );
+  }
+);
+
+test(
+  "placement map keys are exact and case-sensitive",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const map =
+      buildTripSub1PlacementMap([
+        {
+          supplier: "trip.com",
+          is_active: 1,
+          external_tracking_key: "abc",
+          publisher_id: "p1",
+          placement: "abc"
+        },
+        {
+          supplier: "trip.com",
+          is_active: 1,
+          external_tracking_key: "ABC",
+          publisher_id: "p2",
+          placement: "ABC"
+        },
+        {
+          supplier: "trip.com",
+          is_active: 1,
+          external_tracking_key: " abc ",
+          publisher_id: "p3",
+          placement: " abc "
+        }
+      ]);
+
+    assert.equal(map.size, 3);
+    assert.equal(map.get("abc").publisher_id, "p1");
+    assert.equal(map.get("ABC").publisher_id, "p2");
+    assert.equal(map.get(" abc ").publisher_id, "p3");
+    assert.equal(map.has("Abc"), false);
+  }
+);
+
+test(
+  "placement map preserves leading and trailing spaces in keys and values",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const map =
+      buildTripSub1PlacementMap([
+        {
+          supplier: "trip.com",
+          is_active: 1,
+          external_tracking_key: "  key  ",
+          publisher_id: "  publisher  ",
+          placement: "  placement  "
+        }
+      ]);
+
+    assert.equal(map.size, 1);
+    assert.deepEqual(
+      map.get("  key  "),
+      {
+        publisher_id: "  publisher  ",
+        placement: "  placement  "
+      }
+    );
+  }
+);
+
+test(
+  "placement map handles __proto__ key safely",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const map =
+      buildTripSub1PlacementMap([
+        {
+          supplier: "trip.com",
+          is_active: 1,
+          external_tracking_key: "__proto__",
+          publisher_id: "publisher-proto",
+          placement: "placement-proto"
+        }
+      ]);
+
+    assert.equal(map.size, 1);
+    assert.deepEqual(
+      map.get("__proto__"),
+      {
+        publisher_id: "publisher-proto",
+        placement: "placement-proto"
+      }
+    );
+  }
+);
+
+test(
+  "placement map rejects duplicate external_tracking_key",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        buildTripSub1PlacementMap([
+          {
+            supplier: "trip.com",
+            is_active: 1,
+            external_tracking_key: "dup-key",
+            publisher_id: "publisher-a",
+            placement: "placement-a"
+          },
+          {
+            supplier: "trip.com",
+            is_active: 1,
+            external_tracking_key: "dup-key",
+            publisher_id: "publisher-b",
+            placement: "placement-b"
+          }
+        ]),
+      /Duplicate publisher placement tracking key: dup-key/
+    );
+  }
+);
+
+test(
+  "placement map rejects invalid external_tracking_key",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const invalidKeys = [
+      undefined,
+      null,
+      "",
+      "   ",
+      123
+    ];
+
+    for (const key of invalidKeys) {
+      assert.throws(
+        () =>
+          buildTripSub1PlacementMap([
+            {
+              supplier: "trip.com",
+              is_active: 1,
+              external_tracking_key: key,
+              publisher_id: "publisher-a",
+              placement: "placement-a"
+            }
+          ]),
+        /Invalid publisher placement candidate: external_tracking_key/
+      );
+    }
+  }
+);
+
+test(
+  "placement map rejects invalid publisher_id",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const invalidIds = [
+      undefined,
+      null,
+      "",
+      "   ",
+      123
+    ];
+
+    for (const publisherId of invalidIds) {
+      assert.throws(
+        () =>
+          buildTripSub1PlacementMap([
+            {
+              supplier: "trip.com",
+              is_active: 1,
+              external_tracking_key: "key-a",
+              publisher_id: publisherId,
+              placement: "placement-a"
+            }
+          ]),
+        /Invalid publisher placement candidate: publisher_id/
+      );
+    }
+  }
+);
+
+test(
+  "placement map rejects invalid placement",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const invalidPlacements = [
+      undefined,
+      null,
+      "",
+      "   ",
+      123
+    ];
+
+    for (const placement of invalidPlacements) {
+      assert.throws(
+        () =>
+          buildTripSub1PlacementMap([
+            {
+              supplier: "trip.com",
+              is_active: 1,
+              external_tracking_key: "key-a",
+              publisher_id: "publisher-a",
+              placement
+            }
+          ]),
+        /Invalid publisher placement candidate: placement/
+      );
+    }
+  }
+);
+
+test(
+  "placement map rejects non-trip.com supplier",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        buildTripSub1PlacementMap([
+          {
+            supplier: "expedia.com",
+            is_active: 1,
+            external_tracking_key: "key-a",
+            publisher_id: "publisher-a",
+            placement: "placement-a"
+          }
+        ]),
+      /Invalid publisher placement candidate: supplier/
+    );
+  }
+);
+
+test(
+  "placement map rejects inactive rows",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const isActive of [0, null, undefined, "1", true]) {
+      assert.throws(
+        () =>
+          buildTripSub1PlacementMap([
+            {
+              supplier: "trip.com",
+              is_active: isActive,
+              external_tracking_key: "key-a",
+              publisher_id: "publisher-a",
+              placement: "placement-a"
+            }
+          ]),
+        /Invalid publisher placement candidate: is_active/
+      );
+    }
+  }
+);
+
+test(
+  "placement map rejects non-array input",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const input of [null, undefined, {}, "rows", 123]) {
+      assert.throws(
+        () => buildTripSub1PlacementMap(input),
+        /Invalid publisher placement rows/
+      );
+    }
+  }
+);
+
+test(
+  "placement map values contain only publisher_id and placement",
+  async () => {
+    const {
+      buildTripSub1PlacementMap
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const map =
+      buildTripSub1PlacementMap([
+        {
+          supplier: "trip.com",
+          is_active: 1,
+          external_tracking_key: "key-a",
+          publisher_id: "publisher-a",
+          placement: "placement-a",
+          placement_id: "ignored",
+          effective_from: "2026-01-01",
+          effective_to: "2026-12-31"
+        }
+      ]);
+
+    assert.deepEqual(
+      map.get("key-a"),
+      {
+        publisher_id: "publisher-a",
+        placement: "placement-a"
+      }
+    );
+
+    assert.deepEqual(
+      Object.keys(map.get("key-a")).sort(),
+      ["placement", "publisher_id"]
+    );
+  }
+);
+
+test(
+  "placement map integrates with booking normalization",
+  async () => {
+    const {
+      buildTripSub1PlacementMap,
+      normalizeTripBookingRow
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const map =
+      buildTripSub1PlacementMap([
+        {
+          supplier: "trip.com",
+          is_active: 1,
+          external_tracking_key:
+            "flightflex_flights_yyz_bjs_test",
+          publisher_id: "flightflex",
+          placement:
+            "flightflex_flights_yyz_bjs_test"
+        }
+      ]);
+
+    const normalized =
+      await normalizeTripBookingRow(
+        {
+          orderId: "BOOKING-001",
+          sid: "123456",
+          productLine: "htl",
+          orderStatus: "S",
+          amount: "123.45",
+          currency: "CAD",
+          tripSub1:
+            "flightflex_flights_yyz_bjs_test"
+        },
+        {
+          source: "trip.com",
+          aid: "10021103",
+          placementsByTripSub1: map
+        }
+      );
+
+    assert.equal(
+      normalized.attributed_publisher_id,
+      "flightflex"
+    );
+    assert.equal(
+      normalized.attributed_placement,
+      "flightflex_flights_yyz_bjs_test"
+    );
+    assert.equal(
+      normalized.attribution_status,
+      "matched"
+    );
+  }
+);
+
+test(
+  "placement map integrates with commission normalization",
+  async () => {
+    const {
+      buildTripSub1PlacementMap,
+      normalizeTripCommissionRow
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const map =
+      buildTripSub1PlacementMap([
+        {
+          supplier: "trip.com",
+          is_active: 1,
+          external_tracking_key:
+            "flightflex_auto_china_hotels_generic_test",
+          publisher_id: "flightflex",
+          placement:
+            "flightflex_auto_china_hotels_generic_test"
+        }
+      ]);
+
+    const normalized =
+      await normalizeTripCommissionRow(
+        {
+          orderId: "BOOKING-001",
+          sid: "123456",
+          commissionMonth: "2026-08",
+          productLine: "htl",
+          subOrderType: "hotel",
+          planType: "standard",
+          orderStatus: "S",
+          commissionStatus: "SETTLED",
+          bookingAmount: "123.45",
+          commissionAmount: "6.17",
+          currency: "CAD",
+          tripSub1:
+            "flightflex_auto_china_hotels_generic_test"
+        },
+        {
+          source: "trip.com",
+          aid: "10021103",
+          placementsByTripSub1: map
+        }
+      );
+
+    assert.equal(
+      normalized.attributed_publisher_id,
+      "flightflex"
+    );
+    assert.equal(
+      normalized.attributed_placement,
+      "flightflex_auto_china_hotels_generic_test"
+    );
+    assert.equal(
+      normalized.attribution_status,
+      "matched"
+    );
+  }
+);
