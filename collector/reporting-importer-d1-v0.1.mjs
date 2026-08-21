@@ -82,3 +82,79 @@ LIMIT 1
 
   return row;
 }
+
+export async function findExistingBookingFact(database, normalizedRow) {
+  assertDatabaseBinding(database);
+
+  const row =
+    await database
+      .prepare(
+        `
+SELECT
+  booking_fact_id,
+  source_record_key,
+  source_row_hash,
+  attributed_publisher_id,
+  attributed_placement,
+  attribution_status
+FROM trip_bookings
+WHERE source_record_key = ?1
+LIMIT 1
+`
+      )
+      .bind(normalizedRow.source_record_key)
+      .first();
+
+  if (row === null) {
+    return null;
+  }
+
+  if (
+    typeof row !== "object" ||
+    Array.isArray(row)
+  ) {
+    throw new Error(
+      "Invalid D1 result: trip_bookings"
+    );
+  }
+
+  return row;
+}
+
+export async function findExistingCommissionFact(database, normalizedRow) {
+  assertDatabaseBinding(database);
+
+  const row =
+    await database
+      .prepare(
+        `
+SELECT
+  commission_fact_id,
+  commission_record_key,
+  source_row_hash,
+  attributed_publisher_id,
+  attributed_placement,
+  attribution_status
+FROM trip_commissions
+WHERE commission_record_key = ?1
+LIMIT 1
+`
+      )
+      .bind(normalizedRow.commission_record_key)
+      .first();
+
+  if (row === null) {
+    return null;
+  }
+
+  if (
+    typeof row !== "object" ||
+    Array.isArray(row)
+  ) {
+    throw new Error(
+      "Invalid D1 result: trip_commissions"
+    );
+  }
+
+  return row;
+}

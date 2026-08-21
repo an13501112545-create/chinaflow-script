@@ -558,3 +558,538 @@ test(
     });
   }
 );
+
+test(
+  "D1 findExistingBookingFact rejects unavailable database",
+  async () => {
+    const {
+      findExistingBookingFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    await assert.rejects(
+      () =>
+        findExistingBookingFact(null, {
+          source_record_key: "booking-key"
+        }),
+      /D1 binding unavailable/
+    );
+
+    await assert.rejects(
+      () =>
+        findExistingBookingFact({}, {
+          source_record_key: "booking-key"
+        }),
+      /D1 binding unavailable/
+    );
+  }
+);
+
+test(
+  "D1 booking fact lookup prepares SELECT against trip_bookings with minimal columns",
+  async () => {
+    const {
+      findExistingBookingFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database =
+      makeFakeDatabase({
+        firstResult: null
+      });
+
+    await findExistingBookingFact(database, {
+      source_record_key: "booking-key"
+    });
+
+    const sql = database.__calls.prepareSql[0];
+
+    assert.match(sql, /SELECT/i);
+    assert.match(sql, /trip_bookings/i);
+    assert.match(sql, /booking_fact_id/i);
+    assert.match(sql, /source_record_key/i);
+    assert.match(sql, /source_row_hash/i);
+    assert.match(sql, /attributed_publisher_id/i);
+    assert.match(sql, /attributed_placement/i);
+    assert.match(sql, /attribution_status/i);
+    assert.match(sql, /WHERE\s+source_record_key\s*=\s*\?1/i);
+    assert.match(sql, /LIMIT\s+1/i);
+  }
+);
+
+test(
+  "D1 booking fact lookup binds source_record_key exactly",
+  async () => {
+    const {
+      findExistingBookingFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database =
+      makeFakeDatabase({
+        firstResult: null
+      });
+
+    await findExistingBookingFact(database, {
+      source_record_key: " booking-key "
+    });
+
+    assert.deepEqual(
+      database.__calls.bindValues[0],
+      [" booking-key "]
+    );
+  }
+);
+
+test(
+  "D1 booking fact lookup returns null when first() returns null",
+  async () => {
+    const {
+      findExistingBookingFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database =
+      makeFakeDatabase({
+        firstResult: null
+      });
+
+    const result =
+      await findExistingBookingFact(database, {
+        source_record_key: "booking-key"
+      });
+
+    assert.equal(result, null);
+  }
+);
+
+test(
+  "D1 booking fact lookup returns the same row object",
+  async () => {
+    const {
+      findExistingBookingFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const row = {
+      booking_fact_id: "fact-1",
+      source_record_key: "booking-key",
+      source_row_hash: "hash-1",
+      attributed_publisher_id: "flightflex",
+      attributed_placement: "placement-a",
+      attribution_status: "matched"
+    };
+
+    const database =
+      makeFakeDatabase({
+        firstResult: row
+      });
+
+    const result =
+      await findExistingBookingFact(database, {
+        source_record_key: "booking-key"
+      });
+
+    assert.equal(result, row);
+  }
+);
+
+test(
+  "D1 booking fact lookup rejects malformed first() results",
+  async () => {
+    const {
+      findExistingBookingFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    for (const firstResult of [[], "row", 123]) {
+      const database =
+        makeFakeDatabase({
+          firstResult
+        });
+
+      await assert.rejects(
+        () =>
+          findExistingBookingFact(database, {
+            source_record_key: "booking-key"
+          }),
+        /Invalid D1 result: trip_bookings/
+      );
+    }
+  }
+);
+
+test(
+  "D1 integration: booking fact feeds planBookingCurrentState unchanged",
+  async () => {
+    const {
+      findExistingBookingFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const row = {
+      booking_fact_id: "fact-1",
+      source_record_key: "booking-key",
+      source_row_hash: "hash-1",
+      attributed_publisher_id: "flightflex",
+      attributed_placement: "placement-a",
+      attribution_status: "matched"
+    };
+
+    const database =
+      makeFakeDatabase({
+        firstResult: row
+      });
+
+    const normalizedRow = {
+      source_record_key: "booking-key",
+      source_row_hash: "hash-1",
+      attributed_publisher_id: "flightflex",
+      attributed_placement: "placement-a",
+      attribution_status: "matched"
+    };
+
+    const existingFact =
+      await findExistingBookingFact(database, normalizedRow);
+
+    const plan =
+      planBookingCurrentState(normalizedRow, existingFact);
+
+    assert.deepEqual(plan, {
+      state_action: "unchanged",
+      existing_fact_id: "fact-1"
+    });
+  }
+);
+
+test(
+  "D1 integration: booking attribution-only change produces update",
+  async () => {
+    const {
+      findExistingBookingFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const row = {
+      booking_fact_id: "fact-1",
+      source_record_key: "booking-key",
+      source_row_hash: "hash-1",
+      attributed_publisher_id: "flightflex",
+      attributed_placement: "placement-a",
+      attribution_status: "matched"
+    };
+
+    const database =
+      makeFakeDatabase({
+        firstResult: row
+      });
+
+    const normalizedRow = {
+      source_record_key: "booking-key",
+      source_row_hash: "hash-1",
+      attributed_publisher_id: null,
+      attributed_placement: null,
+      attribution_status: "unmatched"
+    };
+
+    const existingFact =
+      await findExistingBookingFact(database, normalizedRow);
+
+    const plan =
+      planBookingCurrentState(normalizedRow, existingFact);
+
+    assert.deepEqual(plan, {
+      state_action: "update",
+      existing_fact_id: "fact-1"
+    });
+  }
+);
+
+test(
+  "D1 findExistingCommissionFact rejects unavailable database",
+  async () => {
+    const {
+      findExistingCommissionFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    await assert.rejects(
+      () =>
+        findExistingCommissionFact(null, {
+          commission_record_key: "commission-key"
+        }),
+      /D1 binding unavailable/
+    );
+
+    await assert.rejects(
+      () =>
+        findExistingCommissionFact({}, {
+          commission_record_key: "commission-key"
+        }),
+      /D1 binding unavailable/
+    );
+  }
+);
+
+test(
+  "D1 commission fact lookup prepares SELECT against trip_commissions with minimal columns",
+  async () => {
+    const {
+      findExistingCommissionFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database =
+      makeFakeDatabase({
+        firstResult: null
+      });
+
+    await findExistingCommissionFact(database, {
+      commission_record_key: "commission-key"
+    });
+
+    const sql = database.__calls.prepareSql[0];
+
+    assert.match(sql, /SELECT/i);
+    assert.match(sql, /trip_commissions/i);
+    assert.match(sql, /commission_fact_id/i);
+    assert.match(sql, /commission_record_key/i);
+    assert.match(sql, /source_row_hash/i);
+    assert.match(sql, /attributed_publisher_id/i);
+    assert.match(sql, /attributed_placement/i);
+    assert.match(sql, /attribution_status/i);
+    assert.match(
+      sql,
+      /WHERE\s+commission_record_key\s*=\s*\?1/i
+    );
+    assert.match(sql, /LIMIT\s+1/i);
+  }
+);
+
+test(
+  "D1 commission fact lookup binds commission_record_key exactly",
+  async () => {
+    const {
+      findExistingCommissionFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database =
+      makeFakeDatabase({
+        firstResult: null
+      });
+
+    await findExistingCommissionFact(database, {
+      commission_record_key: " commission-key "
+    });
+
+    assert.deepEqual(
+      database.__calls.bindValues[0],
+      [" commission-key "]
+    );
+  }
+);
+
+test(
+  "D1 commission fact lookup returns null when first() returns null",
+  async () => {
+    const {
+      findExistingCommissionFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database =
+      makeFakeDatabase({
+        firstResult: null
+      });
+
+    const result =
+      await findExistingCommissionFact(database, {
+        commission_record_key: "commission-key"
+      });
+
+    assert.equal(result, null);
+  }
+);
+
+test(
+  "D1 commission fact lookup returns the same row object",
+  async () => {
+    const {
+      findExistingCommissionFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const row = {
+      commission_fact_id: "fact-1",
+      commission_record_key: "commission-key",
+      source_row_hash: "hash-1",
+      attributed_publisher_id: "flightflex",
+      attributed_placement: "placement-a",
+      attribution_status: "matched"
+    };
+
+    const database =
+      makeFakeDatabase({
+        firstResult: row
+      });
+
+    const result =
+      await findExistingCommissionFact(database, {
+        commission_record_key: "commission-key"
+      });
+
+    assert.equal(result, row);
+  }
+);
+
+test(
+  "D1 commission fact lookup rejects malformed first() results",
+  async () => {
+    const {
+      findExistingCommissionFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    for (const firstResult of [[], "row", 123]) {
+      const database =
+        makeFakeDatabase({
+          firstResult
+        });
+
+      await assert.rejects(
+        () =>
+          findExistingCommissionFact(database, {
+            commission_record_key: "commission-key"
+          }),
+        /Invalid D1 result: trip_commissions/
+      );
+    }
+  }
+);
+
+test(
+  "D1 integration: commission fact feeds planCommissionCurrentState unchanged",
+  async () => {
+    const {
+      findExistingCommissionFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const {
+      planCommissionCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const row = {
+      commission_fact_id: "fact-1",
+      commission_record_key: "commission-key",
+      source_row_hash: "hash-1",
+      attributed_publisher_id: "flightflex",
+      attributed_placement: "placement-a",
+      attribution_status: "matched"
+    };
+
+    const database =
+      makeFakeDatabase({
+        firstResult: row
+      });
+
+    const normalizedRow = {
+      commission_record_key: "commission-key",
+      source_row_hash: "hash-1",
+      attributed_publisher_id: "flightflex",
+      attributed_placement: "placement-a",
+      attribution_status: "matched"
+    };
+
+    const existingFact =
+      await findExistingCommissionFact(database, normalizedRow);
+
+    const plan =
+      planCommissionCurrentState(normalizedRow, existingFact);
+
+    assert.deepEqual(plan, {
+      state_action: "unchanged",
+      existing_fact_id: "fact-1"
+    });
+  }
+);
+
+test(
+  "D1 integration: commission attribution-only change produces update",
+  async () => {
+    const {
+      findExistingCommissionFact
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const {
+      planCommissionCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const row = {
+      commission_fact_id: "fact-1",
+      commission_record_key: "commission-key",
+      source_row_hash: "hash-1",
+      attributed_publisher_id: "flightflex",
+      attributed_placement: "placement-a",
+      attribution_status: "matched"
+    };
+
+    const database =
+      makeFakeDatabase({
+        firstResult: row
+      });
+
+    const normalizedRow = {
+      commission_record_key: "commission-key",
+      source_row_hash: "hash-1",
+      attributed_publisher_id: null,
+      attributed_placement: null,
+      attribution_status: "unmatched"
+    };
+
+    const existingFact =
+      await findExistingCommissionFact(database, normalizedRow);
+
+    const plan =
+      planCommissionCurrentState(normalizedRow, existingFact);
+
+    assert.deepEqual(plan, {
+      state_action: "update",
+      existing_fact_id: "fact-1"
+    });
+  }
+);
