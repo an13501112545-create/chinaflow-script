@@ -919,3 +919,261 @@ test(
     );
   }
 );
+
+test(
+  "booking batch attribution resolves each row independently by trip_sub1",
+  async () => {
+    const {
+      preflightTripBookingRows
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const context = {
+      source: "trip.com",
+      aid: "10021103",
+      placementsByTripSub1:
+        new Map([
+          [
+            "flightflex_flights_yyz_bjs_test",
+            {
+              publisher_id: "flightflex",
+              placement:
+                "flightflex_flights_yyz_bjs_test"
+            }
+          ],
+          [
+            "flightflex_auto_china_hotels_generic_test",
+            {
+              publisher_id: "flightflex",
+              placement:
+                "flightflex_auto_china_hotels_generic_test"
+            }
+          ]
+        ])
+    };
+
+    const rows = [
+      {
+        orderId: "MIXED-001",
+        sid: "123456",
+        productLine: "htl",
+        orderStatus: "S",
+        amount: "100.00",
+        currency: "CAD",
+        tripSub1:
+          "flightflex_flights_yyz_bjs_test"
+      },
+      {
+        orderId: "MIXED-002",
+        sid: "123456",
+        productLine: "htl",
+        orderStatus: "S",
+        amount: "200.00",
+        currency: "CAD",
+        tripSub1:
+          "flightflex_auto_china_hotels_generic_test"
+      },
+      {
+        orderId: "MIXED-003",
+        sid: "123456",
+        productLine: "htl",
+        orderStatus: "S",
+        amount: "300.00",
+        currency: "CAD",
+        tripSub1: "unknown_trip_sub1"
+      },
+      {
+        orderId: "MIXED-004",
+        sid: "123456",
+        productLine: "htl",
+        orderStatus: "S",
+        amount: "400.00",
+        currency: "CAD",
+        tripSub1: "   "
+      }
+    ];
+
+    const normalized =
+      await preflightTripBookingRows(
+        rows,
+        context
+      );
+
+    assert.deepEqual(
+      normalized.map(
+        row => ({
+          publisher:
+            row.attributed_publisher_id,
+          placement:
+            row.attributed_placement,
+          status:
+            row.attribution_status
+        })
+      ),
+      [
+        {
+          publisher: "flightflex",
+          placement:
+            "flightflex_flights_yyz_bjs_test",
+          status: "matched"
+        },
+        {
+          publisher: "flightflex",
+          placement:
+            "flightflex_auto_china_hotels_generic_test",
+          status: "matched"
+        },
+        {
+          publisher: null,
+          placement: null,
+          status: "unmatched"
+        },
+        {
+          publisher: null,
+          placement: null,
+          status: "missing_trip_sub1"
+        }
+      ]
+    );
+  }
+);
+
+test(
+  "commission batch attribution resolves each row independently by trip_sub1",
+  async () => {
+    const {
+      preflightTripCommissionRows
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const context = {
+      source: "trip.com",
+      aid: "10021103",
+      placementsByTripSub1:
+        new Map([
+          [
+            "flightflex_flights_yyz_bjs_test",
+            {
+              publisher_id: "flightflex",
+              placement:
+                "flightflex_flights_yyz_bjs_test"
+            }
+          ],
+          [
+            "flightflex_auto_china_hotels_generic_test",
+            {
+              publisher_id: "flightflex",
+              placement:
+                "flightflex_auto_china_hotels_generic_test"
+            }
+          ]
+        ])
+    };
+
+    const rows = [
+      {
+        orderId: "COMM-MIXED-001",
+        sid: "123456",
+        commissionMonth: "2026-08",
+        productLine: "htl",
+        subOrderType: "hotel",
+        planType: "standard",
+        orderStatus: "S",
+        commissionStatus: "SETTLED",
+        bookingAmount: "100.00",
+        commissionAmount: "5.00",
+        currency: "CAD",
+        tripSub1:
+          "flightflex_flights_yyz_bjs_test"
+      },
+      {
+        orderId: "COMM-MIXED-002",
+        sid: "123456",
+        commissionMonth: "2026-08",
+        productLine: "htl",
+        subOrderType: "hotel",
+        planType: "standard",
+        orderStatus: "S",
+        commissionStatus: "UNDER_REVIEW",
+        bookingAmount: "200.00",
+        commissionAmount: "10.00",
+        currency: "CAD",
+        tripSub1:
+          "flightflex_auto_china_hotels_generic_test"
+      },
+      {
+        orderId: "COMM-MIXED-003",
+        sid: "123456",
+        commissionMonth: "2026-08",
+        productLine: "htl",
+        subOrderType: "hotel",
+        planType: "standard",
+        orderStatus: "S",
+        commissionStatus: "SETTLED",
+        bookingAmount: "300.00",
+        commissionAmount: "15.00",
+        currency: "CAD",
+        tripSub1: "unknown_trip_sub1"
+      },
+      {
+        orderId: "COMM-MIXED-004",
+        sid: "123456",
+        commissionMonth: "2026-08",
+        productLine: "htl",
+        subOrderType: "hotel",
+        planType: "standard",
+        orderStatus: "S",
+        commissionStatus: "SETTLED",
+        bookingAmount: "400.00",
+        commissionAmount: "20.00",
+        currency: "CAD",
+        tripSub1: "   "
+      }
+    ];
+
+    const normalized =
+      await preflightTripCommissionRows(
+        rows,
+        context
+      );
+
+    assert.deepEqual(
+      normalized.map(
+        row => ({
+          publisher:
+            row.attributed_publisher_id,
+          placement:
+            row.attributed_placement,
+          status:
+            row.attribution_status
+        })
+      ),
+      [
+        {
+          publisher: "flightflex",
+          placement:
+            "flightflex_flights_yyz_bjs_test",
+          status: "matched"
+        },
+        {
+          publisher: "flightflex",
+          placement:
+            "flightflex_auto_china_hotels_generic_test",
+          status: "matched"
+        },
+        {
+          publisher: null,
+          placement: null,
+          status: "unmatched"
+        },
+        {
+          publisher: null,
+          placement: null,
+          status: "missing_trip_sub1"
+        }
+      ]
+    );
+  }
+);

@@ -325,10 +325,17 @@ export async function normalizeTripBookingRow(row, context) {
       row?.amount
     );
 
+  const matchedPlacement =
+    context?.placementsByTripSub1 instanceof Map
+      ? context.placementsByTripSub1.get(
+          row?.tripSub1
+        )
+      : context?.matchedPlacement;
+
   const attribution =
     resolveTripSub1Attribution(
       row?.tripSub1,
-      context?.matchedPlacement
+      matchedPlacement
     );
 
   const sourceRecordKey =
@@ -484,10 +491,17 @@ export async function normalizeTripCommissionRow(row, context) {
       row?.commissionAmount
     );
 
+  const matchedPlacement =
+    context?.placementsByTripSub1 instanceof Map
+      ? context.placementsByTripSub1.get(
+          row?.tripSub1
+        )
+      : context?.matchedPlacement;
+
   const attribution =
     resolveTripSub1Attribution(
       row?.tripSub1,
-      context?.matchedPlacement
+      matchedPlacement
     );
 
   const commissionRecordKey =
