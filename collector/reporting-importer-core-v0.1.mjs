@@ -653,6 +653,14 @@ export async function createSourceFileSha256(bytes) {
     )
     .join("");
 }
+
+function isBinaryBufferSource(value) {
+  return (
+    value instanceof ArrayBuffer ||
+    ArrayBuffer.isView(value)
+  );
+}
+
 export async function createIngestionRunPreflight(input) {
   if (
     typeof input?.source !== "string" ||
@@ -672,16 +680,54 @@ export async function createIngestionRunPreflight(input) {
     );
   }
 
+  if (
+    input?.file_bytes === undefined ||
+    input.file_bytes === null
+  ) {
+    throw new Error(
+      "Missing ingestion field: file_bytes"
+    );
+  }
+
+  if (
+    !isBinaryBufferSource(
+      input.file_bytes
+    )
+  ) {
+    throw new Error(
+      "Invalid ingestion field: file_bytes"
+    );
+  }
+
+  if (
+    input?.rows_seen === undefined ||
+    input.rows_seen === null
+  ) {
+    throw new Error(
+      "Missing ingestion field: rows_seen"
+    );
+  }
+
+  if (
+    typeof input.rows_seen !== "number" ||
+    !Number.isInteger(input.rows_seen) ||
+    input.rows_seen < 0
+  ) {
+    throw new Error(
+      "Invalid ingestion field: rows_seen"
+    );
+  }
+
   const sourceFileSha256 =
     await createSourceFileSha256(
-      input?.file_bytes
+      input.file_bytes
     );
 
   return {
     source:
-      input?.source,
+      input.source,
     report_type:
-      input?.report_type,
+      input.report_type,
     source_filename:
       input?.source_filename ?? null,
     report_period_from:
@@ -691,6 +737,6 @@ export async function createIngestionRunPreflight(input) {
     source_file_sha256:
       sourceFileSha256,
     rows_seen:
-      input?.rows_seen
+      input.rows_seen
   };
 }

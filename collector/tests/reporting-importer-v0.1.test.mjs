@@ -921,6 +921,250 @@ test(
 );
 
 test(
+  "ingestion preflight rejects missing file_bytes explicitly",
+  async () => {
+    const {
+      createIngestionRunPreflight
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    await assert.rejects(
+      () =>
+        createIngestionRunPreflight({
+          source: "trip.com",
+          report_type: "booking",
+          rows_seen: 1
+        }),
+      /Missing ingestion field: file_bytes/
+    );
+
+    await assert.rejects(
+      () =>
+        createIngestionRunPreflight({
+          source: "trip.com",
+          report_type: "booking",
+          file_bytes: null,
+          rows_seen: 1
+        }),
+      /Missing ingestion field: file_bytes/
+    );
+  }
+);
+test(
+  "ingestion preflight rejects invalid file_bytes types explicitly",
+  async () => {
+    const {
+      createIngestionRunPreflight
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const invalidValues = [
+      "not-bytes",
+      123,
+      { bytes: true },
+      true
+    ];
+
+    for (const fileBytes of invalidValues) {
+      await assert.rejects(
+        () =>
+          createIngestionRunPreflight({
+            source: "trip.com",
+            report_type: "booking",
+            file_bytes: fileBytes,
+            rows_seen: 1
+          }),
+        /Invalid ingestion field: file_bytes/
+      );
+    }
+  }
+);
+test(
+  "ingestion preflight rejects missing rows_seen explicitly",
+  async () => {
+    const {
+      createIngestionRunPreflight
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const fileBytes =
+      new Uint8Array([1, 2, 3]);
+
+    await assert.rejects(
+      () =>
+        createIngestionRunPreflight({
+          source: "trip.com",
+          report_type: "booking",
+          file_bytes: fileBytes
+        }),
+      /Missing ingestion field: rows_seen/
+    );
+
+    await assert.rejects(
+      () =>
+        createIngestionRunPreflight({
+          source: "trip.com",
+          report_type: "booking",
+          file_bytes: fileBytes,
+          rows_seen: null
+        }),
+      /Missing ingestion field: rows_seen/
+    );
+  }
+);
+test(
+  "ingestion preflight rejects invalid rows_seen values explicitly",
+  async () => {
+    const {
+      createIngestionRunPreflight
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const fileBytes =
+      new Uint8Array([1, 2, 3]);
+
+    const invalidValues = [
+      -1,
+      1.5,
+      "10",
+      NaN,
+      Infinity,
+      -Infinity,
+      {}
+    ];
+
+    for (const rowsSeen of invalidValues) {
+      await assert.rejects(
+        () =>
+          createIngestionRunPreflight({
+            source: "trip.com",
+            report_type: "booking",
+            file_bytes: fileBytes,
+            rows_seen: rowsSeen
+          }),
+        /Invalid ingestion field: rows_seen/
+      );
+    }
+  }
+);
+test(
+  "ingestion preflight accepts rows_seen = 0",
+  async () => {
+    const {
+      createIngestionRunPreflight
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight =
+      await createIngestionRunPreflight({
+        source: "trip.com",
+        report_type: "booking",
+        file_bytes: new Uint8Array([1, 2, 3]),
+        rows_seen: 0
+      });
+
+    assert.equal(preflight.rows_seen, 0);
+  }
+);
+test(
+  "ingestion preflight hashes zero-length binary input deterministically",
+  async () => {
+    const {
+      createIngestionRunPreflight
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight =
+      await createIngestionRunPreflight({
+        source: "trip.com",
+        report_type: "booking",
+        file_bytes: new Uint8Array(0),
+        rows_seen: 0
+      });
+
+    assert.equal(
+      preflight.source_file_sha256,
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+
+    assert.match(
+      preflight.source_file_sha256,
+      /^[0-9a-f]{64}$/
+    );
+  }
+);
+test(
+  "ingestion preflight accepts ArrayBuffer and ArrayBuffer views",
+  async () => {
+    const {
+      createIngestionRunPreflight
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const arrayBuffer =
+      new Uint8Array([1, 2, 3]).buffer;
+
+    const dataView =
+      new DataView(
+        new Uint8Array([1, 2, 3]).buffer
+      );
+
+    const arrayBufferPreflight =
+      await createIngestionRunPreflight({
+        source: "trip.com",
+        report_type: "booking",
+        file_bytes: arrayBuffer,
+        rows_seen: 1
+      });
+
+    const dataViewPreflight =
+      await createIngestionRunPreflight({
+        source: "trip.com",
+        report_type: "booking",
+        file_bytes: dataView,
+        rows_seen: 1
+      });
+
+    assert.match(
+      arrayBufferPreflight.source_file_sha256,
+      /^[0-9a-f]{64}$/
+    );
+
+    assert.equal(
+      dataViewPreflight.source_file_sha256,
+      arrayBufferPreflight.source_file_sha256
+    );
+  }
+);
+test(
+  "ingestion preflight preserves original source and report_type values without trimming",
+  async () => {
+    const {
+      createIngestionRunPreflight
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight =
+      await createIngestionRunPreflight({
+        source: " trip.com ",
+        report_type: " booking ",
+        file_bytes: new Uint8Array([1, 2, 3]),
+        rows_seen: 1
+      });
+
+    assert.equal(preflight.source, " trip.com ");
+    assert.equal(preflight.report_type, " booking ");
+  }
+);
+test(
   "booking batch attribution resolves each row independently by trip_sub1",
   async () => {
     const {
