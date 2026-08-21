@@ -101,26 +101,44 @@ These are local generated state.
 
 ## 4. Immutable production engine
 
-chinaflow-v0.3.js is immutable production history.
+Production engine files are immutable history.
 
-Never overwrite it.
+Never overwrite an existing engine file.
 
-Never convert it in place into a newer engine.
+Never convert an existing engine in place into a newer engine.
 
-Current production manifest rollback target:
+Current production engine:
+
+engine_version:
+0.4
+
+engine file:
+chinaflow-v0.4.js
+
+immutable engine commit:
+8bc504742d0a6f45d2cd920ffcb45aad5367eab2
+
+production cutover commit:
+90e59b2af0ec73ffbb4b0cda7b665798c3fb7e19
+
+production tag:
+chinaflow-v0.4-production
+
+manifest currently points to v0.4.
+
+Previous known-good rollback engine:
 
 engine_version:
 0.3
 
-engine commit:
-c5fd2228dd06694cb7fadc25baa0bfde9c93e5ad
-
 engine file:
 chinaflow-v0.3.js
 
+rollback engine commit:
+c5fd2228dd06694cb7fadc25baa0bfde9c93e5ad
+
 Any new production engine must be created as a new immutable versioned file, for example:
 
-chinaflow-v0.4.js
 chinaflow-v0.5.js
 
 Once promoted, old production engine files remain intact for rollback and audit.
@@ -452,16 +470,20 @@ Do not add authentication, rate limiting, queues, dashboards, or new event types
 
 Migration files are append-only history once used in production.
 
-Current base migration:
+Applied migrations:
 
-collector/migrations/0001_events.sql
+0001_events.sql
+→ original browser events schema
+
+0002_publisher_reporting_v0_1.sql
+→ Publisher Reporting schema (already applied)
 
 Do not edit an already-applied migration to change production schema.
 
 Future schema changes should use:
 
-0002_...
 0003_...
+0004_...
 
 etc.
 
@@ -597,12 +619,32 @@ Specifically do not introduce, unless explicitly requested:
 - multiple OTA integrations
 - LLM routing
 - attribution redesign
-- conversion pipelines
 - new databases
 - new Workers
 - new frameworks
 
 Solve the current problem with the minimum architecture required.
+
+The approved Publisher Reporting scope is an explicit exception to this section.
+
+The approved Publisher Reporting architecture may include:
+
+- trip_bookings facts
+- trip_commissions facts
+- report_ingestion_runs ledger
+- publisher_placements
+- reporting importer core
+- a separate internal Reporting Importer Worker
+- reporting queries
+- later internal admin / publisher reporting surfaces when separately approved
+
+Important boundaries:
+
+- Reporting Importer must NOT be added to the public Event Collector Worker.
+- The existing Event Collector remains dedicated to browser /v1/events.
+- Reporting must reuse the existing CHINAFLOW_EVENTS D1 unless a new database is explicitly approved.
+- Do not create additional Workers or databases merely for convenience.
+- Do not infer bookings, commissions, revenue, or publisher payout from browser click events.
 
 ---
 
@@ -626,22 +668,63 @@ When validation fails, stop and report the failure before modifying additional f
 
 ## 25. Current project state
 
-At the time this AGENTS.md is created:
+- production engine v0.4 is live
+- config analytics is enabled
+- Event Collector v0.1 is live
+- Publisher Reporting migration 0002 has been applied
+- publisher placement seeds exist for production and test
+- reporting importer deterministic core exists
+- row normalization, deterministic identity, money micros, source-row hashing, batch duplicate detection, source-file hashing, ingestion preflight, and mixed trip_sub1 attribution are implemented and tested
+- no Reporting Importer Worker has been deployed yet
+- real Trip.com export parser is NOT yet accepted because a real booking/export file is not yet available
 
-- production engine remains v0.3
-- chinaflow-v0.3.js remains immutable
-- manifest still points to pinned v0.3
-- production Event Collector v0.1 has been deployed
-- production D1 schema has been migrated and validated
-- browser → production Worker → production D1 acceptance has passed
-- chinaflow-v0.4.js has NOT yet been created
-- production config analytics has NOT yet been enabled
-- manifest has NOT yet been promoted to v0.4
+Next approved engineering direction:
 
-The next engineering phase is:
+- strengthen ingestion preflight validation
+- source-file dedupe
+- D1 placement lookup
+- insert/update/unchanged planning
+- atomic D1 persistence
+- then a separate internal Reporting Importer Worker
 
-create and validate chinaflow-v0.4.js as a production candidate
+---
 
-without modifying config.json or manifest.json first.
+## 26. Publisher Reporting architecture
+
+Publisher Reporting is a sidecar to the monetization path, same as analytics.
+
+Durable data model:
+
+events
+→ browser engagement facts
+
+trip_bookings
+→ Trip.com booking facts
+
+trip_commissions
+→ Trip.com commission facts
+
+future commercial terms
+→ publisher payout / share rules
+
+Attribution:
+
+events.trip_sub1 = trip_bookings.trip_sub1
+
+trip_sub1 is placement-level attribution, NOT a click ID.
+
+Booking → Commission relationship uses the provider order identity (source_order_id / order_id) and may be one booking → multiple commission facts.
+
+Unknown / missing trip_sub1 facts must be preserved.
+
+Never estimate revenue facts.
+
+Tenant isolation:
+
+- trip_sub1 is the placement-level attribution key.
+- publisher_id is the tenant / authorization boundary.
+- Reporting queries and publisher-facing surfaces must always enforce publisher_id isolation.
+- A trip_sub1 match must never by itself authorize access to another publisher's data.
+- Unattributed Trip facts may remain with attributed_publisher_id = NULL and must not be exposed to a publisher merely because another field happens to match.
 
 ---
