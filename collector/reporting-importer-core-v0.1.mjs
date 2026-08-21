@@ -740,3 +740,55 @@ export async function createIngestionRunPreflight(input) {
       input.rows_seen
   };
 }
+
+export function planSourceFileDedupe(preflight, existingRun) {
+  if (
+    existingRun === null ||
+    existingRun === undefined
+  ) {
+    return {
+      dedupe_status: "new",
+      should_import: true,
+      existing_ingestion_run_id: null
+    };
+  }
+
+  const sourceMatches =
+    existingRun.source === preflight.source;
+
+  const reportTypeMatches =
+    existingRun.report_type === preflight.report_type;
+
+  const sourceFileSha256Matches =
+    existingRun.source_file_sha256 ===
+    preflight.source_file_sha256;
+
+  if (
+    !sourceMatches ||
+    !reportTypeMatches ||
+    !sourceFileSha256Matches
+  ) {
+    throw new Error(
+      "Mismatched ingestion dedupe candidate"
+    );
+  }
+
+  const ingestionRunId =
+    existingRun.ingestion_run_id;
+
+  if (
+    typeof ingestionRunId !== "string" ||
+    ingestionRunId.trim().length === 0
+  ) {
+    throw new Error(
+      "Invalid ingestion dedupe candidate: ingestion_run_id"
+    );
+  }
+
+  return {
+    dedupe_status: "duplicate",
+    should_import: false,
+    existing_ingestion_run_id:
+      ingestionRunId
+  };
+}

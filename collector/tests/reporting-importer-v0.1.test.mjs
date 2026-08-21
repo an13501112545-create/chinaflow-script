@@ -1421,3 +1421,272 @@ test(
     );
   }
 );
+
+test(
+  "source-file dedupe plans new import when existingRun is null",
+  async () => {
+    const {
+      planSourceFileDedupe
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planSourceFileDedupe(
+        {
+          source: "trip.com",
+          report_type: "booking",
+          source_file_sha256: "abc123"
+        },
+        null
+      ),
+      {
+        dedupe_status: "new",
+        should_import: true,
+        existing_ingestion_run_id: null
+      }
+    );
+  }
+);
+
+test(
+  "source-file dedupe plans new import when existingRun is undefined",
+  async () => {
+    const {
+      planSourceFileDedupe
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planSourceFileDedupe(
+        {
+          source: "trip.com",
+          report_type: "booking",
+          source_file_sha256: "abc123"
+        },
+        undefined
+      ),
+      {
+        dedupe_status: "new",
+        should_import: true,
+        existing_ingestion_run_id: null
+      }
+    );
+  }
+);
+
+test(
+  "source-file dedupe plans duplicate for exact identity and returns existing ingestion_run_id",
+  async () => {
+    const {
+      planSourceFileDedupe
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planSourceFileDedupe(
+        {
+          source: "trip.com",
+          report_type: "booking",
+          source_file_sha256: "abc123"
+        },
+        {
+          ingestion_run_id: "run-001",
+          source: "trip.com",
+          report_type: "booking",
+          source_file_sha256: "abc123",
+          status: "completed"
+        }
+      ),
+      {
+        dedupe_status: "duplicate",
+        should_import: false,
+        existing_ingestion_run_id: "run-001"
+      }
+    );
+  }
+);
+
+test(
+  "source-file dedupe mismatches on different source",
+  async () => {
+    const {
+      planSourceFileDedupe
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planSourceFileDedupe(
+          {
+            source: "trip.com",
+            report_type: "booking",
+            source_file_sha256: "abc123"
+          },
+          {
+            ingestion_run_id: "run-001",
+            source: "other-source",
+            report_type: "booking",
+            source_file_sha256: "abc123"
+          }
+        ),
+      /Mismatched ingestion dedupe candidate/
+    );
+  }
+);
+
+test(
+  "source-file dedupe mismatches on different report_type",
+  async () => {
+    const {
+      planSourceFileDedupe
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planSourceFileDedupe(
+          {
+            source: "trip.com",
+            report_type: "booking",
+            source_file_sha256: "abc123"
+          },
+          {
+            ingestion_run_id: "run-001",
+            source: "trip.com",
+            report_type: "commission",
+            source_file_sha256: "abc123"
+          }
+        ),
+      /Mismatched ingestion dedupe candidate/
+    );
+  }
+);
+
+test(
+  "source-file dedupe mismatches on different source_file_sha256",
+  async () => {
+    const {
+      planSourceFileDedupe
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planSourceFileDedupe(
+          {
+            source: "trip.com",
+            report_type: "booking",
+            source_file_sha256: "abc123"
+          },
+          {
+            ingestion_run_id: "run-001",
+            source: "trip.com",
+            report_type: "booking",
+            source_file_sha256: "different-hash"
+          }
+        ),
+      /Mismatched ingestion dedupe candidate/
+    );
+  }
+);
+
+test(
+  "source-file dedupe ignores status for duplicate classification",
+  async () => {
+    const {
+      planSourceFileDedupe
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const status of ["completed", "failed"]) {
+      assert.deepEqual(
+        planSourceFileDedupe(
+          {
+            source: "trip.com",
+            report_type: "booking",
+            source_file_sha256: "abc123"
+          },
+          {
+            ingestion_run_id: "run-001",
+            source: "trip.com",
+            report_type: "booking",
+            source_file_sha256: "abc123",
+            status
+          }
+        ),
+        {
+          dedupe_status: "duplicate",
+          should_import: false,
+          existing_ingestion_run_id: "run-001"
+        }
+      );
+    }
+  }
+);
+
+test(
+  "source-file dedupe fails when matching row lacks ingestion_run_id",
+  async () => {
+    const {
+      planSourceFileDedupe
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const ingestionRunId of [undefined, null, "", "   "]) {
+      assert.throws(
+        () =>
+          planSourceFileDedupe(
+            {
+              source: "trip.com",
+              report_type: "booking",
+              source_file_sha256: "abc123"
+            },
+            {
+              ingestion_run_id: ingestionRunId,
+              source: "trip.com",
+              report_type: "booking",
+              source_file_sha256: "abc123"
+            }
+          ),
+        /Invalid ingestion dedupe candidate: ingestion_run_id/
+      );
+    }
+  }
+);
+
+test(
+  "source-file dedupe fails on non-string ingestion_run_id",
+  async () => {
+    const {
+      planSourceFileDedupe
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planSourceFileDedupe(
+          {
+            source: "trip.com",
+            report_type: "booking",
+            source_file_sha256: "abc123"
+          },
+          {
+            ingestion_run_id: 123,
+            source: "trip.com",
+            report_type: "booking",
+            source_file_sha256: "abc123"
+          }
+        ),
+      /Invalid ingestion dedupe candidate: ingestion_run_id/
+    );
+  }
+);
