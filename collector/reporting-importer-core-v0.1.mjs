@@ -863,3 +863,203 @@ export function planSourceFileDedupe(preflight, existingRun) {
       ingestionRunId
   };
 }
+
+function isNonNullString(value) {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0
+  );
+}
+
+function assertIncomingAttribution(attribution, prefix) {
+  if (
+    attribution?.attributed_publisher_id !== null &&
+    typeof attribution?.attributed_publisher_id !== "string"
+  ) {
+    throw new Error(
+      `${prefix}: attribution`
+    );
+  }
+
+  if (
+    attribution?.attributed_placement !== null &&
+    typeof attribution?.attributed_placement !== "string"
+  ) {
+    throw new Error(
+      `${prefix}: attribution`
+    );
+  }
+
+  if (!isNonNullString(attribution?.attribution_status)) {
+    throw new Error(
+      `${prefix}: attribution`
+    );
+  }
+}
+
+function assertExistingAttribution(existingFact, prefix) {
+  if (
+    existingFact?.attributed_publisher_id !== null &&
+    typeof existingFact?.attributed_publisher_id !== "string"
+  ) {
+    throw new Error(
+      `${prefix}: attribution`
+    );
+  }
+
+  if (
+    existingFact?.attributed_placement !== null &&
+    typeof existingFact?.attributed_placement !== "string"
+  ) {
+    throw new Error(
+      `${prefix}: attribution`
+    );
+  }
+
+  if (!isNonNullString(existingFact?.attribution_status)) {
+    throw new Error(
+      `${prefix}: attribution`
+    );
+  }
+}
+
+function materialStateEqual(normalizedRow, existingFact) {
+  return (
+    normalizedRow.source_row_hash ===
+      existingFact.source_row_hash &&
+    normalizedRow.attributed_publisher_id ===
+      existingFact.attributed_publisher_id &&
+    normalizedRow.attributed_placement ===
+      existingFact.attributed_placement &&
+    normalizedRow.attribution_status ===
+      existingFact.attribution_status
+  );
+}
+
+export function planBookingCurrentState(normalizedRow, existingFact) {
+  if (!isNonNullString(normalizedRow?.source_record_key)) {
+    throw new Error(
+      "Invalid booking current-state input: source_record_key"
+    );
+  }
+
+  if (!isNonNullString(normalizedRow?.source_row_hash)) {
+    throw new Error(
+      "Invalid booking current-state input: source_row_hash"
+    );
+  }
+
+  assertIncomingAttribution(
+    normalizedRow,
+    "Invalid booking current-state input"
+  );
+
+  if (
+    existingFact === null ||
+    existingFact === undefined
+  ) {
+    return {
+      state_action: "insert",
+      existing_fact_id: null
+    };
+  }
+
+  if (
+    existingFact.source_record_key !==
+    normalizedRow.source_record_key
+  ) {
+    throw new Error(
+      "Mismatched booking current-state candidate"
+    );
+  }
+
+  if (!isNonNullString(existingFact?.booking_fact_id)) {
+    throw new Error(
+      "Invalid booking current-state candidate: booking_fact_id"
+    );
+  }
+
+  if (!isNonNullString(existingFact?.source_row_hash)) {
+    throw new Error(
+      "Invalid booking current-state candidate: source_row_hash"
+    );
+  }
+
+  assertExistingAttribution(
+    existingFact,
+    "Invalid booking current-state candidate"
+  );
+
+  return {
+    state_action:
+      materialStateEqual(normalizedRow, existingFact)
+        ? "unchanged"
+        : "update",
+    existing_fact_id:
+      existingFact.booking_fact_id
+  };
+}
+
+export function planCommissionCurrentState(normalizedRow, existingFact) {
+  if (!isNonNullString(normalizedRow?.commission_record_key)) {
+    throw new Error(
+      "Invalid commission current-state input: commission_record_key"
+    );
+  }
+
+  if (!isNonNullString(normalizedRow?.source_row_hash)) {
+    throw new Error(
+      "Invalid commission current-state input: source_row_hash"
+    );
+  }
+
+  assertIncomingAttribution(
+    normalizedRow,
+    "Invalid commission current-state input"
+  );
+
+  if (
+    existingFact === null ||
+    existingFact === undefined
+  ) {
+    return {
+      state_action: "insert",
+      existing_fact_id: null
+    };
+  }
+
+  if (
+    existingFact.commission_record_key !==
+    normalizedRow.commission_record_key
+  ) {
+    throw new Error(
+      "Mismatched commission current-state candidate"
+    );
+  }
+
+  if (!isNonNullString(existingFact?.commission_fact_id)) {
+    throw new Error(
+      "Invalid commission current-state candidate: commission_fact_id"
+    );
+  }
+
+  if (!isNonNullString(existingFact?.source_row_hash)) {
+    throw new Error(
+      "Invalid commission current-state candidate: source_row_hash"
+    );
+  }
+
+  assertExistingAttribution(
+    existingFact,
+    "Invalid commission current-state candidate"
+  );
+
+  return {
+    state_action:
+      materialStateEqual(normalizedRow, existingFact)
+        ? "unchanged"
+        : "update",
+    existing_fact_id:
+      existingFact.commission_fact_id
+  };
+}

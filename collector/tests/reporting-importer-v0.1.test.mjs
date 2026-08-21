@@ -2256,3 +2256,883 @@ test(
     );
   }
 );
+
+test(
+  "booking current-state: null existing fact plans insert",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planBookingCurrentState(
+        {
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        },
+        null
+      ),
+      {
+        state_action: "insert",
+        existing_fact_id: null
+      }
+    );
+  }
+);
+
+test(
+  "booking current-state: undefined existing fact plans insert",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planBookingCurrentState(
+        {
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: null,
+          attributed_placement: null,
+          attribution_status: "unmatched"
+        },
+        undefined
+      ),
+      {
+        state_action: "insert",
+        existing_fact_id: null
+      }
+    );
+  }
+);
+
+test(
+  "booking current-state: exact material equality plans unchanged",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planBookingCurrentState(
+        {
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        },
+        {
+          booking_fact_id: "fact-1",
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        }
+      ),
+      {
+        state_action: "unchanged",
+        existing_fact_id: "fact-1"
+      }
+    );
+  }
+);
+
+test(
+  "booking current-state: different source_row_hash plans update",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planBookingCurrentState(
+        {
+          source_record_key: "booking-key",
+          source_row_hash: "hash-2",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        },
+        {
+          booking_fact_id: "fact-1",
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        }
+      ),
+      {
+        state_action: "update",
+        existing_fact_id: "fact-1"
+      }
+    );
+  }
+);
+
+test(
+  "booking current-state: different attributed_publisher_id plans update",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planBookingCurrentState(
+        {
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex-b",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        },
+        {
+          booking_fact_id: "fact-1",
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex-a",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        }
+      ),
+      {
+        state_action: "update",
+        existing_fact_id: "fact-1"
+      }
+    );
+  }
+);
+
+test(
+  "booking current-state: different attributed_placement plans update",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planBookingCurrentState(
+        {
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-b",
+          attribution_status: "matched"
+        },
+        {
+          booking_fact_id: "fact-1",
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        }
+      ),
+      {
+        state_action: "update",
+        existing_fact_id: "fact-1"
+      }
+    );
+  }
+);
+
+test(
+  "booking current-state: different attribution_status plans update",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planBookingCurrentState(
+        {
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "unmatched"
+        },
+        {
+          booking_fact_id: "fact-1",
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        }
+      ),
+      {
+        state_action: "update",
+        existing_fact_id: "fact-1"
+      }
+    );
+  }
+);
+
+test(
+  "booking current-state: matched-to-unmatched attribution change plans update",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planBookingCurrentState(
+        {
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: null,
+          attributed_placement: null,
+          attribution_status: "unmatched"
+        },
+        {
+          booking_fact_id: "fact-1",
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        }
+      ),
+      {
+        state_action: "update",
+        existing_fact_id: "fact-1"
+      }
+    );
+  }
+);
+
+test(
+  "booking current-state: unmatched-to-matched attribution change plans update",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planBookingCurrentState(
+        {
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        },
+        {
+          booking_fact_id: "fact-1",
+          source_record_key: "booking-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: null,
+          attributed_placement: null,
+          attribution_status: "unmatched"
+        }
+      ),
+      {
+        state_action: "update",
+        existing_fact_id: "fact-1"
+      }
+    );
+  }
+);
+
+test(
+  "booking current-state: source_record_key mismatch throws",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planBookingCurrentState(
+          {
+            source_record_key: "booking-key-a",
+            source_row_hash: "hash-1",
+            attributed_publisher_id: null,
+            attributed_placement: null,
+            attribution_status: "unmatched"
+          },
+          {
+            booking_fact_id: "fact-1",
+            source_record_key: "booking-key-b",
+            source_row_hash: "hash-1",
+            attributed_publisher_id: null,
+            attributed_placement: null,
+            attribution_status: "unmatched"
+          }
+        ),
+      /Mismatched booking current-state candidate/
+    );
+  }
+);
+
+test(
+  "booking current-state: invalid booking_fact_id throws",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const bookingFactId of [undefined, null, "", "   ", 123]) {
+      assert.throws(
+        () =>
+          planBookingCurrentState(
+            {
+              source_record_key: "booking-key",
+              source_row_hash: "hash-1",
+              attributed_publisher_id: null,
+              attributed_placement: null,
+              attribution_status: "unmatched"
+            },
+            {
+              booking_fact_id: bookingFactId,
+              source_record_key: "booking-key",
+              source_row_hash: "hash-1",
+              attributed_publisher_id: null,
+              attributed_placement: null,
+              attribution_status: "unmatched"
+            }
+          ),
+        /Invalid booking current-state candidate: booking_fact_id/
+      );
+    }
+  }
+);
+
+test(
+  "booking current-state: invalid existing source_row_hash throws",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const sourceRowHash of [undefined, null, "", "   ", 123]) {
+      assert.throws(
+        () =>
+          planBookingCurrentState(
+            {
+              source_record_key: "booking-key",
+              source_row_hash: "hash-1",
+              attributed_publisher_id: null,
+              attributed_placement: null,
+              attribution_status: "unmatched"
+            },
+            {
+              booking_fact_id: "fact-1",
+              source_record_key: "booking-key",
+              source_row_hash: sourceRowHash,
+              attributed_publisher_id: null,
+              attributed_placement: null,
+              attribution_status: "unmatched"
+            }
+          ),
+        /Invalid booking current-state candidate: source_row_hash/
+      );
+    }
+  }
+);
+
+test(
+  "booking current-state: invalid incoming source_record_key throws",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const sourceRecordKey of [undefined, null, "", "   ", 123]) {
+      assert.throws(
+        () =>
+          planBookingCurrentState(
+            {
+              source_record_key: sourceRecordKey,
+              source_row_hash: "hash-1",
+              attributed_publisher_id: null,
+              attributed_placement: null,
+              attribution_status: "unmatched"
+            },
+            null
+          ),
+        /Invalid booking current-state input: source_record_key/
+      );
+    }
+  }
+);
+
+test(
+  "booking current-state: invalid incoming source_row_hash throws",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const sourceRowHash of [undefined, null, "", "   ", 123]) {
+      assert.throws(
+        () =>
+          planBookingCurrentState(
+            {
+              source_record_key: "booking-key",
+              source_row_hash: sourceRowHash,
+              attributed_publisher_id: null,
+              attributed_placement: null,
+              attribution_status: "unmatched"
+            },
+            null
+          ),
+        /Invalid booking current-state input: source_row_hash/
+      );
+    }
+  }
+);
+
+test(
+  "booking current-state: malformed existing attribution throws",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const incoming = {
+      source_record_key: "booking-key",
+      source_row_hash: "hash-1",
+      attributed_publisher_id: null,
+      attributed_placement: null,
+      attribution_status: "unmatched"
+    };
+
+    const malformedAttributions = [
+      {
+        attributed_publisher_id: 123,
+        attributed_placement: null,
+        attribution_status: "unmatched"
+      },
+      {
+        attributed_publisher_id: null,
+        attributed_placement: 123,
+        attribution_status: "unmatched"
+      },
+      {
+        attributed_publisher_id: null,
+        attributed_placement: null,
+        attribution_status: null
+      },
+      {
+        attributed_publisher_id: null,
+        attributed_placement: null,
+        attribution_status: "   "
+      }
+    ];
+
+    for (const attribution of malformedAttributions) {
+      assert.throws(
+        () =>
+          planBookingCurrentState(
+            incoming,
+            {
+              booking_fact_id: "fact-1",
+              source_record_key: "booking-key",
+              source_row_hash: "hash-1",
+              ...attribution
+            }
+          ),
+        /Invalid booking current-state candidate: attribution/
+      );
+    }
+  }
+);
+
+test(
+  "booking current-state: null vs undefined attribution values are not equivalent",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planBookingCurrentState(
+          {
+            source_record_key: "booking-key",
+            source_row_hash: "hash-1",
+            attributed_publisher_id: null,
+            attributed_placement: undefined,
+            attribution_status: "unmatched"
+          },
+          {
+            booking_fact_id: "fact-1",
+            source_record_key: "booking-key",
+            source_row_hash: "hash-1",
+            attributed_publisher_id: null,
+            attributed_placement: null,
+            attribution_status: "unmatched"
+          }
+        ),
+      /Invalid booking current-state input: attribution/
+    );
+  }
+);
+
+test(
+  "booking current-state: leading/trailing spaces compared exactly",
+  async () => {
+    const {
+      planBookingCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planBookingCurrentState(
+        {
+          source_record_key: "  booking-key  ",
+          source_row_hash: "  hash-1  ",
+          attributed_publisher_id: "  flightflex  ",
+          attributed_placement: "  placement-a  ",
+          attribution_status: "  matched  "
+        },
+        {
+          booking_fact_id: "fact-1",
+          source_record_key: "  booking-key  ",
+          source_row_hash: "  hash-1  ",
+          attributed_publisher_id: "  flightflex  ",
+          attributed_placement: "  placement-a  ",
+          attribution_status: "  matched  "
+        }
+      ),
+      {
+        state_action: "unchanged",
+        existing_fact_id: "fact-1"
+      }
+    );
+  }
+);
+
+test(
+  "commission current-state: null existing fact plans insert",
+  async () => {
+    const {
+      planCommissionCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planCommissionCurrentState(
+        {
+          commission_record_key: "commission-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        },
+        null
+      ),
+      {
+        state_action: "insert",
+        existing_fact_id: null
+      }
+    );
+  }
+);
+
+test(
+  "commission current-state: exact material equality plans unchanged",
+  async () => {
+    const {
+      planCommissionCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planCommissionCurrentState(
+        {
+          commission_record_key: "commission-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        },
+        {
+          commission_fact_id: "fact-1",
+          commission_record_key: "commission-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        }
+      ),
+      {
+        state_action: "unchanged",
+        existing_fact_id: "fact-1"
+      }
+    );
+  }
+);
+
+test(
+  "commission current-state: different source_row_hash plans update",
+  async () => {
+    const {
+      planCommissionCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planCommissionCurrentState(
+        {
+          commission_record_key: "commission-key",
+          source_row_hash: "hash-2",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        },
+        {
+          commission_fact_id: "fact-1",
+          commission_record_key: "commission-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        }
+      ),
+      {
+        state_action: "update",
+        existing_fact_id: "fact-1"
+      }
+    );
+  }
+);
+
+test(
+  "commission current-state: attribution-only change plans update",
+  async () => {
+    const {
+      planCommissionCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.deepEqual(
+      planCommissionCurrentState(
+        {
+          commission_record_key: "commission-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: null,
+          attributed_placement: null,
+          attribution_status: "unmatched"
+        },
+        {
+          commission_fact_id: "fact-1",
+          commission_record_key: "commission-key",
+          source_row_hash: "hash-1",
+          attributed_publisher_id: "flightflex",
+          attributed_placement: "placement-a",
+          attribution_status: "matched"
+        }
+      ),
+      {
+        state_action: "update",
+        existing_fact_id: "fact-1"
+      }
+    );
+  }
+);
+
+test(
+  "commission current-state: commission_record_key mismatch throws",
+  async () => {
+    const {
+      planCommissionCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planCommissionCurrentState(
+          {
+            commission_record_key: "commission-key-a",
+            source_row_hash: "hash-1",
+            attributed_publisher_id: null,
+            attributed_placement: null,
+            attribution_status: "unmatched"
+          },
+          {
+            commission_fact_id: "fact-1",
+            commission_record_key: "commission-key-b",
+            source_row_hash: "hash-1",
+            attributed_publisher_id: null,
+            attributed_placement: null,
+            attribution_status: "unmatched"
+          }
+        ),
+      /Mismatched commission current-state candidate/
+    );
+  }
+);
+
+test(
+  "commission current-state: invalid commission_fact_id throws",
+  async () => {
+    const {
+      planCommissionCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const commissionFactId of [undefined, null, "", "   ", 123]) {
+      assert.throws(
+        () =>
+          planCommissionCurrentState(
+            {
+              commission_record_key: "commission-key",
+              source_row_hash: "hash-1",
+              attributed_publisher_id: null,
+              attributed_placement: null,
+              attribution_status: "unmatched"
+            },
+            {
+              commission_fact_id: commissionFactId,
+              commission_record_key: "commission-key",
+              source_row_hash: "hash-1",
+              attributed_publisher_id: null,
+              attributed_placement: null,
+              attribution_status: "unmatched"
+            }
+          ),
+        /Invalid commission current-state candidate: commission_fact_id/
+      );
+    }
+  }
+);
+
+test(
+  "commission current-state: invalid existing source_row_hash throws",
+  async () => {
+    const {
+      planCommissionCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const sourceRowHash of [undefined, null, "", "   ", 123]) {
+      assert.throws(
+        () =>
+          planCommissionCurrentState(
+            {
+              commission_record_key: "commission-key",
+              source_row_hash: "hash-1",
+              attributed_publisher_id: null,
+              attributed_placement: null,
+              attribution_status: "unmatched"
+            },
+            {
+              commission_fact_id: "fact-1",
+              commission_record_key: "commission-key",
+              source_row_hash: sourceRowHash,
+              attributed_publisher_id: null,
+              attributed_placement: null,
+              attribution_status: "unmatched"
+            }
+          ),
+        /Invalid commission current-state candidate: source_row_hash/
+      );
+    }
+  }
+);
+
+test(
+  "commission current-state: malformed existing attribution throws",
+  async () => {
+    const {
+      planCommissionCurrentState
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const incoming = {
+      commission_record_key: "commission-key",
+      source_row_hash: "hash-1",
+      attributed_publisher_id: null,
+      attributed_placement: null,
+      attribution_status: "unmatched"
+    };
+
+    const malformedAttributions = [
+      {
+        attributed_publisher_id: 123,
+        attributed_placement: null,
+        attribution_status: "unmatched"
+      },
+      {
+        attributed_publisher_id: null,
+        attributed_placement: 123,
+        attribution_status: "unmatched"
+      },
+      {
+        attributed_publisher_id: null,
+        attributed_placement: null,
+        attribution_status: null
+      },
+      {
+        attributed_publisher_id: null,
+        attributed_placement: null,
+        attribution_status: "   "
+      }
+    ];
+
+    for (const attribution of malformedAttributions) {
+      assert.throws(
+        () =>
+          planCommissionCurrentState(
+            incoming,
+            {
+              commission_fact_id: "fact-1",
+              commission_record_key: "commission-key",
+              source_row_hash: "hash-1",
+              ...attribution
+            }
+          ),
+        /Invalid commission current-state candidate: attribution/
+      );
+    }
+  }
+);
