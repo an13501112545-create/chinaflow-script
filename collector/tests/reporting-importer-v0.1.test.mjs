@@ -3632,3 +3632,1139 @@ test(
     assert.notEqual(first, second);
   }
 );
+
+const BOOKING_NORMALIZED_ROW = {
+  source_record_key: "booking-key",
+  source_row_hash: "hash-1",
+  source: "trip.com",
+  source_order_id: "BOOKING-001",
+  aid: "10021103",
+  sid: "123456",
+  sid_name: "sid-name",
+  trip_sub1: "flightflex_flights_yyz_bjs_test",
+  trip_sub3: "sub3",
+  attributed_publisher_id: "flightflex",
+  attributed_placement: "placement-a",
+  attribution_status: "matched",
+  raw_product_line: "htl",
+  normalized_product: "hotel",
+  raw_order_status: "S",
+  normalized_order_status: "successful",
+  booking_amount_raw: "100.00",
+  booking_amount_micros: 100000000,
+  currency: null,
+  order_date: "2026-08-01",
+  product_start_date: "2026-08-05",
+  product_end_date: "2026-08-08",
+  booking_window: 3,
+  departure_city: "YYZ",
+  departure_country: "CA",
+  arrival_city: "BJS",
+  arrival_country: "CN",
+  order_platform: "web",
+  booker_region: "CA",
+  ouid: "ouid-1"
+};
+
+const COMMISSION_NORMALIZED_ROW = {
+  commission_record_key: "commission-key",
+  source_row_hash: "hash-1",
+  source: "trip.com",
+  source_order_id: "BOOKING-001",
+  aid: "10021103",
+  sid: "123456",
+  sid_name: "sid-name",
+  trip_sub1: "flightflex_flights_yyz_bjs_test",
+  trip_sub3: "sub3",
+  attributed_publisher_id: "flightflex",
+  attributed_placement: "placement-a",
+  attribution_status: "matched",
+  raw_product_line: "htl",
+  normalized_product: "hotel",
+  sub_order_type: "sub-order-type",
+  raw_order_status: "S",
+  normalized_order_status: "successful",
+  raw_commission_status: "SETTLED",
+  normalized_commission_status: "settled",
+  booking_amount_raw: "200.00",
+  booking_amount_micros: 200000000,
+  commission_amount_raw: "-5.00",
+  commission_amount_micros: -5000000,
+  currency: null,
+  commission_month: "2026-08",
+  order_date: "2026-08-01",
+  check_out_or_issue_date: "2026-08-08",
+  ratio_raw: "0.05",
+  plan_type: "standard",
+  region: "CA",
+  ouid: "ouid-1"
+};
+
+const INSERT_OBSERVATION = {
+  first_seen_at: "2026-08-21T22:00:00.000Z",
+  last_seen_at: "2026-08-21T22:00:00.000Z",
+  first_ingestion_run_id: "run-001",
+  last_ingestion_run_id: "run-001",
+  source_ingested_at: "2026-08-21T22:00:00.000Z"
+};
+
+const LATEST_OBSERVATION = {
+  last_seen_at: "2026-08-22T00:00:00.000Z",
+  last_ingestion_run_id: "run-002",
+  source_ingested_at: "2026-08-22T00:00:00.000Z"
+};
+
+test(
+  "booking persistence: insert maps to persistence_action insert",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "insert", existing_fact_id: null },
+        INSERT_OBSERVATION,
+        {
+          new_fact_id: "fact-new",
+          raw_payload_json: "{\"raw\":true}"
+        }
+      );
+
+    assert.equal(result.persistence_action, "insert");
+  }
+);
+
+test(
+  "booking persistence: insert booking_fact_id comes exactly from new_fact_id",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "insert", existing_fact_id: null },
+        INSERT_OBSERVATION,
+        {
+          new_fact_id: " fact-new ",
+          raw_payload_json: "{\"raw\":true}"
+        }
+      );
+
+    assert.equal(result.booking_fact_id, " fact-new ");
+    assert.equal(result.values.booking_fact_id, " fact-new ");
+  }
+);
+
+test(
+  "booking persistence: insert values contain exact complete booking schema field set",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "insert", existing_fact_id: null },
+        INSERT_OBSERVATION,
+        {
+          new_fact_id: "fact-new",
+          raw_payload_json: "{\"raw\":true}"
+        }
+      );
+
+    assert.deepEqual(
+      Object.keys(result.values).sort(),
+      [
+        "aid",
+        "arrival_city",
+        "arrival_country",
+        "attributed_placement",
+        "attributed_publisher_id",
+        "attribution_status",
+        "booker_region",
+        "booking_amount_micros",
+        "booking_amount_raw",
+        "booking_fact_id",
+        "booking_window",
+        "currency",
+        "departure_city",
+        "departure_country",
+        "first_ingestion_run_id",
+        "first_seen_at",
+        "last_ingestion_run_id",
+        "last_seen_at",
+        "normalized_order_status",
+        "normalized_product",
+        "order_date",
+        "order_platform",
+        "ouid",
+        "product_end_date",
+        "product_start_date",
+        "raw_order_status",
+        "raw_payload_json",
+        "raw_product_line",
+        "sid",
+        "sid_name",
+        "source",
+        "source_ingested_at",
+        "source_order_id",
+        "source_record_key",
+        "source_row_hash",
+        "trip_sub1",
+        "trip_sub3"
+      ]
+    );
+  }
+);
+
+test(
+  "booking persistence: insert preserves null currency",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "insert", existing_fact_id: null },
+        INSERT_OBSERVATION,
+        {
+          new_fact_id: "fact-new",
+          raw_payload_json: "{\"raw\":true}"
+        }
+      );
+
+    assert.equal(result.values.currency, null);
+  }
+);
+
+test(
+  "booking persistence: insert preserves 0 booking_amount_micros",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        { ...BOOKING_NORMALIZED_ROW, booking_amount_micros: 0 },
+        { state_action: "insert", existing_fact_id: null },
+        INSERT_OBSERVATION,
+        {
+          new_fact_id: "fact-new",
+          raw_payload_json: "{\"raw\":true}"
+        }
+      );
+
+    assert.equal(result.values.booking_amount_micros, 0);
+  }
+);
+
+test(
+  "booking persistence: insert preserves exact raw_payload_json string",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "insert", existing_fact_id: null },
+        INSERT_OBSERVATION,
+        {
+          new_fact_id: "fact-new",
+          raw_payload_json: " {\"raw\": true} "
+        }
+      );
+
+    assert.equal(result.values.raw_payload_json, " {\"raw\": true} ");
+  }
+);
+
+test(
+  "booking persistence: insert contains all five observation fields",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "insert", existing_fact_id: null },
+        INSERT_OBSERVATION,
+        {
+          new_fact_id: "fact-new",
+          raw_payload_json: "{\"raw\":true}"
+        }
+      );
+
+    assert.equal(result.values.first_seen_at, INSERT_OBSERVATION.first_seen_at);
+    assert.equal(result.values.last_seen_at, INSERT_OBSERVATION.last_seen_at);
+    assert.equal(
+      result.values.first_ingestion_run_id,
+      INSERT_OBSERVATION.first_ingestion_run_id
+    );
+    assert.equal(
+      result.values.last_ingestion_run_id,
+      INSERT_OBSERVATION.last_ingestion_run_id
+    );
+    assert.equal(
+      result.values.source_ingested_at,
+      INSERT_OBSERVATION.source_ingested_at
+    );
+  }
+);
+
+test(
+  "booking persistence: insert requires existing_fact_id to be null",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planBookingFactPersistence(
+          BOOKING_NORMALIZED_ROW,
+          { state_action: "insert", existing_fact_id: "fact-1" },
+          INSERT_OBSERVATION,
+          {
+            new_fact_id: "fact-new",
+            raw_payload_json: "{\"raw\":true}"
+          }
+        ),
+      /Invalid fact persistence state plan/
+    );
+  }
+);
+
+test(
+  "booking persistence: insert missing/blank/non-string new_fact_id fails",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const newFactId of [undefined, null, "", "   ", 123]) {
+      assert.throws(
+        () =>
+          planBookingFactPersistence(
+            BOOKING_NORMALIZED_ROW,
+            { state_action: "insert", existing_fact_id: null },
+            INSERT_OBSERVATION,
+            {
+              new_fact_id: newFactId,
+              raw_payload_json: "{\"raw\":true}"
+            }
+          ),
+        /Invalid booking persistence context: new_fact_id/
+      );
+    }
+  }
+);
+
+test(
+  "booking persistence: insert missing/blank/non-string raw_payload_json fails",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const rawPayloadJson of [undefined, null, "", "   ", 123]) {
+      assert.throws(
+        () =>
+          planBookingFactPersistence(
+            BOOKING_NORMALIZED_ROW,
+            { state_action: "insert", existing_fact_id: null },
+            INSERT_OBSERVATION,
+            {
+              new_fact_id: "fact-new",
+              raw_payload_json: rawPayloadJson
+            }
+          ),
+        /Invalid booking persistence context: raw_payload_json/
+      );
+    }
+  }
+);
+
+test(
+  "booking persistence: update maps to update_material",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "update", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal(result.persistence_action, "update_material");
+  }
+);
+
+test(
+  "booking persistence: update uses exact existing_fact_id",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "update", existing_fact_id: " fact-1 " },
+        LATEST_OBSERVATION,
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal(result.booking_fact_id, " fact-1 ");
+  }
+);
+
+test(
+  "booking persistence: update values exclude booking_fact_id and source_record_key",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "update", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal("booking_fact_id" in result.values, false);
+    assert.equal("source_record_key" in result.values, false);
+  }
+);
+
+test(
+  "booking persistence: update excludes first-observation metadata",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "update", existing_fact_id: "fact-1" },
+        { ...LATEST_OBSERVATION, first_seen_at: "x", first_ingestion_run_id: "y" },
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal("first_seen_at" in result.values, false);
+    assert.equal("first_ingestion_run_id" in result.values, false);
+  }
+);
+
+test(
+  "booking persistence: update includes latest three observation fields",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "update", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal(result.values.last_seen_at, LATEST_OBSERVATION.last_seen_at);
+    assert.equal(
+      result.values.last_ingestion_run_id,
+      LATEST_OBSERVATION.last_ingestion_run_id
+    );
+    assert.equal(
+      result.values.source_ingested_at,
+      LATEST_OBSERVATION.source_ingested_at
+    );
+  }
+);
+
+test(
+  "booking persistence: update includes raw_payload_json",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "update", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal(result.values.raw_payload_json, "{\"raw\":true}");
+  }
+);
+
+test(
+  "booking persistence: update preserves attribution-only material values exactly",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const row = {
+      ...BOOKING_NORMALIZED_ROW,
+      source_row_hash: "hash-1",
+      attributed_publisher_id: null,
+      attributed_placement: null,
+      attribution_status: "unmatched"
+    };
+
+    const result =
+      planBookingFactPersistence(
+        row,
+        { state_action: "update", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal(result.values.source_row_hash, "hash-1");
+    assert.equal(result.values.attributed_publisher_id, null);
+    assert.equal(result.values.attributed_placement, null);
+    assert.equal(result.values.attribution_status, "unmatched");
+  }
+);
+
+test(
+  "booking persistence: unchanged maps to update_observation",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "unchanged", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        {}
+      );
+
+    assert.equal(result.persistence_action, "update_observation");
+  }
+);
+
+test(
+  "booking persistence: unchanged values contain exactly three keys",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "unchanged", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        {}
+      );
+
+    assert.deepEqual(
+      Object.keys(result.values).sort(),
+      [
+        "last_ingestion_run_id",
+        "last_seen_at",
+        "source_ingested_at"
+      ]
+    );
+  }
+);
+
+test(
+  "booking persistence: unchanged does not contain raw_payload_json or material fields",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "unchanged", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal("raw_payload_json" in result.values, false);
+    assert.equal("source_row_hash" in result.values, false);
+    assert.equal("attributed_publisher_id" in result.values, false);
+    assert.equal("attributed_placement" in result.values, false);
+    assert.equal("attribution_status" in result.values, false);
+  }
+);
+
+test(
+  "commission persistence: insert complete exact commission schema field set",
+  async () => {
+    const {
+      planCommissionFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCommissionFactPersistence(
+        COMMISSION_NORMALIZED_ROW,
+        { state_action: "insert", existing_fact_id: null },
+        INSERT_OBSERVATION,
+        {
+          new_fact_id: "fact-new",
+          raw_payload_json: "{\"raw\":true}"
+        }
+      );
+
+    assert.deepEqual(
+      Object.keys(result.values).sort(),
+      [
+        "aid",
+        "attributed_placement",
+        "attributed_publisher_id",
+        "attribution_status",
+        "booking_amount_micros",
+        "booking_amount_raw",
+        "check_out_or_issue_date",
+        "commission_amount_micros",
+        "commission_amount_raw",
+        "commission_fact_id",
+        "commission_month",
+        "commission_record_key",
+        "currency",
+        "first_ingestion_run_id",
+        "first_seen_at",
+        "last_ingestion_run_id",
+        "last_seen_at",
+        "normalized_commission_status",
+        "normalized_order_status",
+        "normalized_product",
+        "order_date",
+        "ouid",
+        "plan_type",
+        "ratio_raw",
+        "raw_commission_status",
+        "raw_order_status",
+        "raw_payload_json",
+        "raw_product_line",
+        "region",
+        "sid",
+        "sid_name",
+        "source",
+        "source_ingested_at",
+        "source_order_id",
+        "source_row_hash",
+        "sub_order_type",
+        "trip_sub1",
+        "trip_sub3"
+      ]
+    );
+  }
+);
+
+test(
+  "commission persistence: insert preserves negative commission_amount_micros",
+  async () => {
+    const {
+      planCommissionFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCommissionFactPersistence(
+        COMMISSION_NORMALIZED_ROW,
+        { state_action: "insert", existing_fact_id: null },
+        INSERT_OBSERVATION,
+        {
+          new_fact_id: "fact-new",
+          raw_payload_json: "{\"raw\":true}"
+        }
+      );
+
+    assert.equal(result.values.commission_amount_micros, -5000000);
+  }
+);
+
+test(
+  "commission persistence: insert preserves null currency",
+  async () => {
+    const {
+      planCommissionFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCommissionFactPersistence(
+        COMMISSION_NORMALIZED_ROW,
+        { state_action: "insert", existing_fact_id: null },
+        INSERT_OBSERVATION,
+        {
+          new_fact_id: "fact-new",
+          raw_payload_json: "{\"raw\":true}"
+        }
+      );
+
+    assert.equal(result.values.currency, null);
+  }
+);
+
+test(
+  "commission persistence: update maps to update_material",
+  async () => {
+    const {
+      planCommissionFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCommissionFactPersistence(
+        COMMISSION_NORMALIZED_ROW,
+        { state_action: "update", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal(result.persistence_action, "update_material");
+  }
+);
+
+test(
+  "commission persistence: update excludes commission_fact_id / commission_record_key",
+  async () => {
+    const {
+      planCommissionFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCommissionFactPersistence(
+        COMMISSION_NORMALIZED_ROW,
+        { state_action: "update", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal("commission_fact_id" in result.values, false);
+    assert.equal("commission_record_key" in result.values, false);
+  }
+);
+
+test(
+  "commission persistence: update excludes first-observation metadata",
+  async () => {
+    const {
+      planCommissionFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCommissionFactPersistence(
+        COMMISSION_NORMALIZED_ROW,
+        { state_action: "update", existing_fact_id: "fact-1" },
+        { ...LATEST_OBSERVATION, first_seen_at: "x", first_ingestion_run_id: "y" },
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal("first_seen_at" in result.values, false);
+    assert.equal("first_ingestion_run_id" in result.values, false);
+  }
+);
+
+test(
+  "commission persistence: update includes latest observation + raw_payload_json",
+  async () => {
+    const {
+      planCommissionFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCommissionFactPersistence(
+        COMMISSION_NORMALIZED_ROW,
+        { state_action: "update", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal(result.values.last_seen_at, LATEST_OBSERVATION.last_seen_at);
+    assert.equal(
+      result.values.last_ingestion_run_id,
+      LATEST_OBSERVATION.last_ingestion_run_id
+    );
+    assert.equal(
+      result.values.source_ingested_at,
+      LATEST_OBSERVATION.source_ingested_at
+    );
+    assert.equal(result.values.raw_payload_json, "{\"raw\":true}");
+  }
+);
+
+test(
+  "commission persistence: unchanged maps to update_observation",
+  async () => {
+    const {
+      planCommissionFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCommissionFactPersistence(
+        COMMISSION_NORMALIZED_ROW,
+        { state_action: "unchanged", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        {}
+      );
+
+    assert.equal(result.persistence_action, "update_observation");
+  }
+);
+
+test(
+  "commission persistence: unchanged contains exactly three values",
+  async () => {
+    const {
+      planCommissionFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCommissionFactPersistence(
+        COMMISSION_NORMALIZED_ROW,
+        { state_action: "unchanged", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        {}
+      );
+
+    assert.deepEqual(
+      Object.keys(result.values).sort(),
+      [
+        "last_ingestion_run_id",
+        "last_seen_at",
+        "source_ingested_at"
+      ]
+    );
+  }
+);
+
+test(
+  "commission persistence: unchanged excludes raw_payload_json and material fields",
+  async () => {
+    const {
+      planCommissionFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planCommissionFactPersistence(
+        COMMISSION_NORMALIZED_ROW,
+        { state_action: "unchanged", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal("raw_payload_json" in result.values, false);
+    assert.equal("source_row_hash" in result.values, false);
+    assert.equal("attributed_publisher_id" in result.values, false);
+  }
+);
+
+test(
+  "persistence: unknown / uppercase state_action rejected",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    for (const stateAction of ["INSERT", "UPDATE", "UNCHANGED", "delete", ""]) {
+      assert.throws(
+        () =>
+          planBookingFactPersistence(
+            BOOKING_NORMALIZED_ROW,
+            { state_action: stateAction, existing_fact_id: "fact-1" },
+            LATEST_OBSERVATION,
+            { raw_payload_json: "{\"raw\":true}" }
+          ),
+        /Invalid fact persistence state plan/
+      );
+    }
+  }
+);
+
+test(
+  "persistence: update with null existing_fact_id rejected",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planBookingFactPersistence(
+          BOOKING_NORMALIZED_ROW,
+          { state_action: "update", existing_fact_id: null },
+          LATEST_OBSERVATION,
+          { raw_payload_json: "{\"raw\":true}" }
+        ),
+      /Invalid fact persistence state plan/
+    );
+  }
+);
+
+test(
+  "persistence: unchanged with blank existing_fact_id rejected",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planBookingFactPersistence(
+          BOOKING_NORMALIZED_ROW,
+          { state_action: "unchanged", existing_fact_id: "   " },
+          LATEST_OBSERVATION,
+          {}
+        ),
+      /Invalid fact persistence state plan/
+    );
+  }
+);
+
+test(
+  "persistence: insert with non-null existing_fact_id rejected",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planBookingFactPersistence(
+          BOOKING_NORMALIZED_ROW,
+          { state_action: "insert", existing_fact_id: undefined },
+          INSERT_OBSERVATION,
+          {
+            new_fact_id: "fact-new",
+            raw_payload_json: "{\"raw\":true}"
+          }
+        ),
+      /Invalid fact persistence state plan/
+    );
+  }
+);
+
+test(
+  "persistence: invalid observation metadata rejected",
+  async () => {
+    const {
+      planBookingFactPersistence,
+      planCommissionFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        planBookingFactPersistence(
+          BOOKING_NORMALIZED_ROW,
+          { state_action: "insert", existing_fact_id: null },
+          null,
+          { new_fact_id: "fact-new", raw_payload_json: "{\"raw\":true}" }
+        ),
+      /Invalid booking persistence observation metadata/
+    );
+
+    assert.throws(
+      () =>
+        planCommissionFactPersistence(
+          COMMISSION_NORMALIZED_ROW,
+          { state_action: "update", existing_fact_id: "fact-1" },
+          { last_seen_at: "   ", last_ingestion_run_id: "r", source_ingested_at: "s" },
+          { raw_payload_json: "{\"raw\":true}" }
+        ),
+      /Invalid commission persistence observation metadata/
+    );
+  }
+);
+
+test(
+  "persistence: context whitespace strings are preserved exactly when valid",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        BOOKING_NORMALIZED_ROW,
+        { state_action: "insert", existing_fact_id: null },
+        INSERT_OBSERVATION,
+        {
+          new_fact_id: " fact-new ",
+          raw_payload_json: " {\"raw\": true} "
+        }
+      );
+
+    assert.equal(result.booking_fact_id, " fact-new ");
+    assert.equal(result.values.raw_payload_json, " {\"raw\": true} ");
+  }
+);
+
+test(
+  "persistence: no input mutation",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const normalizedRow = { ...BOOKING_NORMALIZED_ROW };
+    const statePlan = { state_action: "update", existing_fact_id: "fact-1" };
+    const observationMetadata = { ...LATEST_OBSERVATION };
+    const context = { raw_payload_json: "{\"raw\":true}" };
+
+    const rowBefore = JSON.stringify(normalizedRow);
+    const planBefore = JSON.stringify(statePlan);
+    const metadataBefore = JSON.stringify(observationMetadata);
+    const contextBefore = JSON.stringify(context);
+
+    planBookingFactPersistence(
+      normalizedRow,
+      statePlan,
+      observationMetadata,
+      context
+    );
+
+    assert.equal(JSON.stringify(normalizedRow), rowBefore);
+    assert.equal(JSON.stringify(statePlan), planBefore);
+    assert.equal(JSON.stringify(observationMetadata), metadataBefore);
+    assert.equal(JSON.stringify(context), contextBefore);
+  }
+);
+
+test(
+  "persistence: deterministic deep-equal results",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const args = [
+      BOOKING_NORMALIZED_ROW,
+      { state_action: "update", existing_fact_id: "fact-1" },
+      LATEST_OBSERVATION,
+      { raw_payload_json: "{\"raw\":true}" }
+    ];
+
+    const first = planBookingFactPersistence(...args);
+    const second = planBookingFactPersistence(...args);
+
+    assert.deepEqual(first, second);
+    assert.notEqual(first, second);
+  }
+);
+
+test(
+  "persistence: extra unknown normalizedRow property is not copied into values",
+  async () => {
+    const {
+      planBookingFactPersistence
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const result =
+      planBookingFactPersistence(
+        { ...BOOKING_NORMALIZED_ROW, unexpected_field: "leak" },
+        { state_action: "update", existing_fact_id: "fact-1" },
+        LATEST_OBSERVATION,
+        { raw_payload_json: "{\"raw\":true}" }
+      );
+
+    assert.equal("unexpected_field" in result.values, false);
+  }
+);

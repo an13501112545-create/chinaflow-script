@@ -1113,3 +1113,297 @@ export function planCurrentStateObservationMetadata(statePlan, context) {
     source_ingested_at: context.observed_at
   };
 }
+
+const OBSERVATION_INSERT_FIELDS = [
+  "first_seen_at",
+  "last_seen_at",
+  "first_ingestion_run_id",
+  "last_ingestion_run_id",
+  "source_ingested_at"
+];
+
+const OBSERVATION_LATEST_FIELDS = [
+  "last_seen_at",
+  "last_ingestion_run_id",
+  "source_ingested_at"
+];
+
+const BOOKING_MATERIAL_FIELDS = [
+  "source",
+  "source_order_id",
+  "aid",
+  "sid",
+  "sid_name",
+  "source_row_hash",
+  "trip_sub1",
+  "trip_sub3",
+  "attributed_publisher_id",
+  "attributed_placement",
+  "attribution_status",
+  "raw_product_line",
+  "normalized_product",
+  "raw_order_status",
+  "normalized_order_status",
+  "booking_amount_raw",
+  "booking_amount_micros",
+  "currency",
+  "order_date",
+  "product_start_date",
+  "product_end_date",
+  "booking_window",
+  "departure_city",
+  "departure_country",
+  "arrival_city",
+  "arrival_country",
+  "order_platform",
+  "booker_region",
+  "ouid"
+];
+
+const COMMISSION_MATERIAL_FIELDS = [
+  "source",
+  "source_order_id",
+  "aid",
+  "sid",
+  "sid_name",
+  "source_row_hash",
+  "trip_sub1",
+  "trip_sub3",
+  "attributed_publisher_id",
+  "attributed_placement",
+  "attribution_status",
+  "raw_product_line",
+  "normalized_product",
+  "sub_order_type",
+  "raw_order_status",
+  "normalized_order_status",
+  "raw_commission_status",
+  "normalized_commission_status",
+  "booking_amount_raw",
+  "booking_amount_micros",
+  "commission_amount_raw",
+  "commission_amount_micros",
+  "currency",
+  "commission_month",
+  "order_date",
+  "check_out_or_issue_date",
+  "ratio_raw",
+  "plan_type",
+  "region",
+  "ouid"
+];
+
+function isNonNullObject(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+  );
+}
+
+function mapFields(source, fields) {
+  const result = {};
+
+  for (const field of fields) {
+    result[field] = source[field];
+  }
+
+  return result;
+}
+
+function assertFactPersistenceStatePlan(statePlan) {
+  if (!isNonNullObject(statePlan)) {
+    throw new Error(
+      "Invalid fact persistence state plan"
+    );
+  }
+
+  if (
+    statePlan.state_action !== "insert" &&
+    statePlan.state_action !== "update" &&
+    statePlan.state_action !== "unchanged"
+  ) {
+    throw new Error(
+      "Invalid fact persistence state plan"
+    );
+  }
+
+  if (statePlan.state_action === "insert") {
+    if (statePlan.existing_fact_id !== null) {
+      throw new Error(
+        "Invalid fact persistence state plan"
+      );
+    }
+  } else if (
+    !isNonNullString(statePlan.existing_fact_id)
+  ) {
+    throw new Error(
+      "Invalid fact persistence state plan"
+    );
+  }
+}
+
+function assertObservationMetadata(
+  observationMetadata,
+  stateAction,
+  errorPrefix
+) {
+  if (!isNonNullObject(observationMetadata)) {
+    throw new Error(
+      `${errorPrefix} persistence observation metadata`
+    );
+  }
+
+  const fields =
+    stateAction === "insert"
+      ? OBSERVATION_INSERT_FIELDS
+      : OBSERVATION_LATEST_FIELDS;
+
+  for (const field of fields) {
+    if (!isNonNullString(observationMetadata[field])) {
+      throw new Error(
+        `${errorPrefix} persistence observation metadata`
+      );
+    }
+  }
+}
+
+function assertPersistenceContext(
+  context,
+  stateAction,
+  errorPrefix
+) {
+  if (stateAction === "insert") {
+    if (!isNonNullString(context?.new_fact_id)) {
+      throw new Error(
+        `${errorPrefix} persistence context: new_fact_id`
+      );
+    }
+  }
+
+  if (stateAction !== "unchanged") {
+    if (!isNonNullString(context?.raw_payload_json)) {
+      throw new Error(
+        `${errorPrefix} persistence context: raw_payload_json`
+      );
+    }
+  }
+}
+
+export function planBookingFactPersistence(
+  normalizedRow,
+  statePlan,
+  observationMetadata,
+  context
+) {
+  if (!isNonNullObject(normalizedRow)) {
+    throw new Error(
+      "Invalid fact persistence normalized row"
+    );
+  }
+
+  assertFactPersistenceStatePlan(statePlan);
+  assertObservationMetadata(
+    observationMetadata,
+    statePlan.state_action,
+    "Invalid booking"
+  );
+  assertPersistenceContext(
+    context,
+    statePlan.state_action,
+    "Invalid booking"
+  );
+
+  if (statePlan.state_action === "insert") {
+    return {
+      persistence_action: "insert",
+      booking_fact_id: context.new_fact_id,
+      values: {
+        booking_fact_id: context.new_fact_id,
+        source_record_key:
+          normalizedRow.source_record_key,
+        ...mapFields(normalizedRow, BOOKING_MATERIAL_FIELDS),
+        ...mapFields(observationMetadata, OBSERVATION_INSERT_FIELDS),
+        raw_payload_json: context.raw_payload_json
+      }
+    };
+  }
+
+  if (statePlan.state_action === "update") {
+    return {
+      persistence_action: "update_material",
+      booking_fact_id: statePlan.existing_fact_id,
+      values: {
+        ...mapFields(normalizedRow, BOOKING_MATERIAL_FIELDS),
+        ...mapFields(observationMetadata, OBSERVATION_LATEST_FIELDS),
+        raw_payload_json: context.raw_payload_json
+      }
+    };
+  }
+
+  return {
+    persistence_action: "update_observation",
+    booking_fact_id: statePlan.existing_fact_id,
+    values:
+      mapFields(observationMetadata, OBSERVATION_LATEST_FIELDS)
+  };
+}
+
+export function planCommissionFactPersistence(
+  normalizedRow,
+  statePlan,
+  observationMetadata,
+  context
+) {
+  if (!isNonNullObject(normalizedRow)) {
+    throw new Error(
+      "Invalid fact persistence normalized row"
+    );
+  }
+
+  assertFactPersistenceStatePlan(statePlan);
+  assertObservationMetadata(
+    observationMetadata,
+    statePlan.state_action,
+    "Invalid commission"
+  );
+  assertPersistenceContext(
+    context,
+    statePlan.state_action,
+    "Invalid commission"
+  );
+
+  if (statePlan.state_action === "insert") {
+    return {
+      persistence_action: "insert",
+      commission_fact_id: context.new_fact_id,
+      values: {
+        commission_fact_id: context.new_fact_id,
+        commission_record_key:
+          normalizedRow.commission_record_key,
+        ...mapFields(normalizedRow, COMMISSION_MATERIAL_FIELDS),
+        ...mapFields(observationMetadata, OBSERVATION_INSERT_FIELDS),
+        raw_payload_json: context.raw_payload_json
+      }
+    };
+  }
+
+  if (statePlan.state_action === "update") {
+    return {
+      persistence_action: "update_material",
+      commission_fact_id: statePlan.existing_fact_id,
+      values: {
+        ...mapFields(normalizedRow, COMMISSION_MATERIAL_FIELDS),
+        ...mapFields(observationMetadata, OBSERVATION_LATEST_FIELDS),
+        raw_payload_json: context.raw_payload_json
+      }
+    };
+  }
+
+  return {
+    persistence_action: "update_observation",
+    commission_fact_id: statePlan.existing_fact_id,
+    values:
+      mapFields(observationMetadata, OBSERVATION_LATEST_FIELDS)
+  };
+}
