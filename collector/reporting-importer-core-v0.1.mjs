@@ -1407,3 +1407,122 @@ export function planCommissionFactPersistence(
       mapFields(observationMetadata, OBSERVATION_LATEST_FIELDS)
   };
 }
+
+export function planSuccessfulIngestionRun(
+  preflight,
+  statePlans,
+  context
+) {
+  if (!isNonNullObject(preflight)) {
+    throw new Error(
+      "Invalid successful ingestion preflight"
+    );
+  }
+
+  if (!isNonNullString(preflight.source)) {
+    throw new Error(
+      "Invalid successful ingestion preflight"
+    );
+  }
+
+  if (!isNonNullString(preflight.report_type)) {
+    throw new Error(
+      "Invalid successful ingestion preflight"
+    );
+  }
+
+  if (!isNonNullString(preflight.source_file_sha256)) {
+    throw new Error(
+      "Invalid successful ingestion preflight"
+    );
+  }
+
+  if (
+    typeof preflight.rows_seen !== "number" ||
+    !Number.isInteger(preflight.rows_seen) ||
+    preflight.rows_seen < 0
+  ) {
+    throw new Error(
+      "Invalid successful ingestion preflight"
+    );
+  }
+
+  if (!Array.isArray(statePlans)) {
+    throw new Error(
+      "Invalid successful ingestion state plans"
+    );
+  }
+
+  if (statePlans.length !== preflight.rows_seen) {
+    throw new Error(
+      "Successful ingestion row count mismatch"
+    );
+  }
+
+  let rowsInserted = 0;
+  let rowsUpdated = 0;
+  let rowsUnchanged = 0;
+
+  for (const statePlan of statePlans) {
+    if (!isNonNullObject(statePlan)) {
+      throw new Error(
+        "Invalid successful ingestion state plans"
+      );
+    }
+
+    if (
+      statePlan.state_action !== "insert" &&
+      statePlan.state_action !== "update" &&
+      statePlan.state_action !== "unchanged"
+    ) {
+      throw new Error(
+        "Invalid successful ingestion state plans"
+      );
+    }
+
+    if (statePlan.state_action === "insert") {
+      rowsInserted += 1;
+    } else if (statePlan.state_action === "update") {
+      rowsUpdated += 1;
+    } else {
+      rowsUnchanged += 1;
+    }
+  }
+
+  if (!isNonNullString(context?.ingestion_run_id)) {
+    throw new Error(
+      "Invalid successful ingestion context: ingestion_run_id"
+    );
+  }
+
+  if (!isNonNullString(context?.started_at)) {
+    throw new Error(
+      "Invalid successful ingestion context: started_at"
+    );
+  }
+
+  if (!isNonNullString(context?.observed_at)) {
+    throw new Error(
+      "Invalid successful ingestion context: observed_at"
+    );
+  }
+
+  return {
+    ingestion_run_id: context.ingestion_run_id,
+    source: preflight.source,
+    report_type: preflight.report_type,
+    report_period_from: preflight.report_period_from,
+    report_period_to: preflight.report_period_to,
+    source_filename: preflight.source_filename,
+    source_file_sha256: preflight.source_file_sha256,
+    started_at: context.started_at,
+    completed_at: context.observed_at,
+    rows_seen: preflight.rows_seen,
+    rows_inserted: rowsInserted,
+    rows_updated: rowsUpdated,
+    rows_unchanged: rowsUnchanged,
+    rows_rejected: 0,
+    status: "completed",
+    error_summary: null
+  };
+}

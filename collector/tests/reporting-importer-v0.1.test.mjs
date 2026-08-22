@@ -4768,3 +4768,423 @@ test(
     assert.equal("unexpected_field" in result.values, false);
   }
 );
+
+function makeStatePlan(action) {
+  return action === "insert"
+    ? { state_action: "insert", existing_fact_id: null }
+    : { state_action: action, existing_fact_id: "fact-1" };
+}
+
+function makeSuccessfulContext(overrides = {}) {
+  return Object.assign(
+    {
+      ingestion_run_id: "run-001",
+      started_at: "2026-08-01T00:00:00Z",
+      observed_at: "2026-08-01T00:05:00Z"
+    },
+    overrides
+  );
+}
+
+const SUCCESSFUL_RUN_KEYS = [
+  "ingestion_run_id",
+  "source",
+  "report_type",
+  "report_period_from",
+  "report_period_to",
+  "source_filename",
+  "source_file_sha256",
+  "started_at",
+  "completed_at",
+  "rows_seen",
+  "rows_inserted",
+  "rows_updated",
+  "rows_unchanged",
+  "rows_rejected",
+  "status",
+  "error_summary"
+];
+
+async function makePreflight(overrides = {}) {
+  const {
+    createIngestionRunPreflight
+  } = await import(
+    "../reporting-importer-core-v0.1.mjs"
+  );
+
+  const base = await createIngestionRunPreflight({
+    source: "trip.com",
+    report_type: "booking",
+    source_filename: "booking-report.csv",
+    report_period_from: "2026-08-01",
+    report_period_to: "2026-08-20",
+    file_bytes: new TextEncoder().encode("report-v0.1\n"),
+    rows_seen: 3
+  });
+
+  return Object.assign(base, overrides);
+}
+
+test(
+  "successful ingestion run counts insert/update/unchanged and locks completed",
+  async () => {
+    const {
+      planSuccessfulIngestionRun
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight();
+    const context = makeSuccessfulContext();
+
+    const result = planSuccessfulIngestionRun(
+      preflight,
+      [
+        makeStatePlan("insert"),
+        makeStatePlan("update"),
+        makeStatePlan("unchanged")
+      ],
+      context
+    );
+
+    assert.equal(result.status, "completed");
+    assert.equal(result.error_summary, null);
+    assert.equal(result.rows_rejected, 0);
+    assert.equal(result.rows_inserted, 1);
+    assert.equal(result.rows_updated, 1);
+    assert.equal(result.rows_unchanged, 1);
+    assert.equal(result.rows_seen, 3);
+    assert.equal(
+      result.rows_inserted +
+        result.rows_updated +
+        result.rows_unchanged +
+        result.rows_rejected,
+      result.rows_seen
+    );
+    assert.deepEqual(Object.keys(result), SUCCESSFUL_RUN_KEYS);
+  }
+);
+
+test(
+  "successful ingestion run maps every output field exactly",
+  async () => {
+    const {
+      planSuccessfulIngestionRun
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight();
+    const context = makeSuccessfulContext({
+      ingestion_run_id: " run-with-spaces ",
+      started_at: " started-at ",
+      observed_at: " observed-at "
+    });
+
+    const result = planSuccessfulIngestionRun(
+      preflight,
+      [
+        makeStatePlan("insert"),
+        makeStatePlan("update"),
+        makeStatePlan("unchanged")
+      ],
+      context
+    );
+
+    assert.equal(result.ingestion_run_id, " run-with-spaces ");
+    assert.equal(result.source, "trip.com");
+    assert.equal(result.report_type, "booking");
+    assert.equal(result.report_period_from, "2026-08-01");
+    assert.equal(result.report_period_to, "2026-08-20");
+    assert.equal(result.source_filename, "booking-report.csv");
+    assert.equal(
+      result.source_file_sha256,
+      preflight.source_file_sha256
+    );
+    assert.equal(result.started_at, " started-at ");
+    assert.equal(result.completed_at, " observed-at ");
+    assert.equal(result.rows_seen, 3);
+  }
+);
+
+test(
+  "successful ingestion run preserves optional null preflight values",
+  async () => {
+    const {
+      planSuccessfulIngestionRun
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight({
+      source_filename: null,
+      report_period_from: null,
+      report_period_to: null,
+      rows_seen: 1
+    });
+    const context = makeSuccessfulContext();
+
+    const result = planSuccessfulIngestionRun(
+      preflight,
+      [makeStatePlan("insert")],
+      context
+    );
+
+    assert.equal(result.source_filename, null);
+    assert.equal(result.report_period_from, null);
+    assert.equal(result.report_period_to, null);
+  }
+);
+
+test(
+  "successful ingestion run accepts zero-row import",
+  async () => {
+    const {
+      planSuccessfulIngestionRun
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight({ rows_seen: 0 });
+    const context = makeSuccessfulContext();
+
+    const result = planSuccessfulIngestionRun(
+      preflight,
+      [],
+      context
+    );
+
+    assert.equal(result.rows_seen, 0);
+    assert.equal(result.rows_inserted, 0);
+    assert.equal(result.rows_updated, 0);
+    assert.equal(result.rows_unchanged, 0);
+    assert.equal(result.rows_rejected, 0);
+    assert.equal(result.status, "completed");
+  }
+);
+
+test(
+  "successful ingestion run rejects preflight length mismatch",
+  async () => {
+    const {
+      planSuccessfulIngestionRun
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight({ rows_seen: 3 });
+    const context = makeSuccessfulContext();
+
+    assert.throws(
+      () =>
+        planSuccessfulIngestionRun(
+          preflight,
+          [makeStatePlan("insert")],
+          context
+        ),
+      /Successful ingestion row count mismatch/
+    );
+  }
+);
+
+test(
+  "successful ingestion run rejects malformed preflight",
+  async () => {
+    const {
+      planSuccessfulIngestionRun
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const context = makeSuccessfulContext();
+
+    const malformed = [
+      null,
+      [],
+      "preflight",
+      {},
+      { source: "   ", report_type: "booking", source_file_sha256: "h", rows_seen: 0 },
+      { source: "trip.com", report_type: "   ", source_file_sha256: "h", rows_seen: 0 },
+      { source: "trip.com", report_type: "booking", source_file_sha256: "   ", rows_seen: 0 },
+      { source: "trip.com", report_type: "booking", source_file_sha256: 123, rows_seen: 0 },
+      { source: "trip.com", report_type: "booking", source_file_sha256: "h", rows_seen: -1 },
+      { source: "trip.com", report_type: "booking", source_file_sha256: "h", rows_seen: 1.5 },
+      { source: "trip.com", report_type: "booking", source_file_sha256: "h", rows_seen: "1" },
+      { source: "trip.com", report_type: "booking", source_file_sha256: "h", rows_seen: null }
+    ];
+
+    for (const preflight of malformed) {
+      assert.throws(
+        () =>
+          planSuccessfulIngestionRun(
+            preflight,
+            [],
+            context
+          ),
+        /Invalid successful ingestion preflight/
+      );
+    }
+  }
+);
+
+test(
+  "successful ingestion run rejects non-array and malformed state plans",
+  async () => {
+    const {
+      planSuccessfulIngestionRun
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const context = makeSuccessfulContext();
+    const preflight = await makePreflight({ rows_seen: 1 });
+
+    assert.throws(
+      () =>
+        planSuccessfulIngestionRun(
+          preflight,
+          { state_action: "insert" },
+          context
+        ),
+      /Invalid successful ingestion state plans/
+    );
+
+    const badPlans = [
+      [null],
+      [{}],
+      [{ state_action: "INSERT" }],
+      [{ state_action: "UPDATE" }],
+      [{ state_action: "unchanged!" }],
+      ["insert"]
+    ];
+
+    for (const statePlans of badPlans) {
+      assert.throws(
+        () =>
+          planSuccessfulIngestionRun(
+            { source: "trip.com", report_type: "booking", source_file_sha256: "h", rows_seen: 1 },
+            statePlans,
+            context
+          ),
+        /Invalid successful ingestion state plans/
+      );
+    }
+  }
+);
+
+test(
+  "successful ingestion run rejects missing or blank context fields",
+  async () => {
+    const {
+      planSuccessfulIngestionRun
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight({ rows_seen: 1 });
+    const plans = [makeStatePlan("insert")];
+
+    assert.throws(
+      () =>
+        planSuccessfulIngestionRun(
+          preflight,
+          plans,
+          { started_at: "a", observed_at: "b" }
+        ),
+      /Invalid successful ingestion context: ingestion_run_id/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulIngestionRun(
+          preflight,
+          plans,
+          { ingestion_run_id: "r", observed_at: "b" }
+        ),
+      /Invalid successful ingestion context: started_at/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulIngestionRun(
+          preflight,
+          plans,
+          { ingestion_run_id: "r", started_at: "a" }
+        ),
+      /Invalid successful ingestion context: observed_at/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulIngestionRun(
+          preflight,
+          plans,
+          { ingestion_run_id: "   ", started_at: "a", observed_at: "b" }
+        ),
+      /Invalid successful ingestion context: ingestion_run_id/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulIngestionRun(
+          preflight,
+          plans,
+          { ingestion_run_id: "r", started_at: "   ", observed_at: "b" }
+        ),
+      /Invalid successful ingestion context: started_at/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulIngestionRun(
+          preflight,
+          plans,
+          { ingestion_run_id: "r", started_at: "a", observed_at: "   " }
+        ),
+      /Invalid successful ingestion context: observed_at/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulIngestionRun(
+          preflight,
+          plans,
+          { ingestion_run_id: 123, started_at: "a", observed_at: "b" }
+        ),
+      /Invalid successful ingestion context: ingestion_run_id/
+    );
+  }
+);
+
+test(
+  "successful ingestion run does not mutate inputs and is deterministic",
+  async () => {
+    const {
+      planSuccessfulIngestionRun
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight();
+    const plans = [
+      makeStatePlan("insert"),
+      makeStatePlan("update"),
+      makeStatePlan("unchanged")
+    ];
+    const context = makeSuccessfulContext();
+
+    const preflightSnapshot = JSON.stringify(preflight);
+    const plansSnapshot = JSON.stringify(plans);
+    const contextSnapshot = JSON.stringify(context);
+
+    const first = planSuccessfulIngestionRun(preflight, plans, context);
+    const second = planSuccessfulIngestionRun(preflight, plans, context);
+
+    assert.deepEqual(first, second);
+    assert.notEqual(first, second);
+
+    assert.equal(JSON.stringify(preflight), preflightSnapshot);
+    assert.equal(JSON.stringify(plans), plansSnapshot);
+    assert.equal(JSON.stringify(context), contextSnapshot);
+  }
+);
