@@ -5188,3 +5188,716 @@ test(
     assert.equal(JSON.stringify(context), contextSnapshot);
   }
 );
+
+const ORCH_CONTEXT = {
+  ingestion_run_id: "run-orch-001",
+  started_at: "2026-08-22T00:00:00.000Z",
+  observed_at: "2026-08-22T00:05:00.000Z"
+};
+
+function makeBookingOrchRow(index) {
+  return {
+    ...BOOKING_NORMALIZED_ROW,
+    source_record_key: `booking-key-${index}`,
+    source_row_hash: `hash-${index}`
+  };
+}
+
+function makeCommissionOrchRow(index) {
+  return {
+    ...COMMISSION_NORMALIZED_ROW,
+    commission_record_key: `commission-key-${index}`,
+    source_row_hash: `hash-${index}`
+  };
+}
+
+function makeBookingExistingFact(index, row, overrides = {}) {
+  return {
+    booking_fact_id: `fact-${index}`,
+    source_record_key: row.source_record_key,
+    source_row_hash: row.source_row_hash,
+    attributed_publisher_id: row.attributed_publisher_id,
+    attributed_placement: row.attributed_placement,
+    attribution_status: row.attribution_status,
+    ...overrides
+  };
+}
+
+function makeCommissionExistingFact(index, row, overrides = {}) {
+  return {
+    commission_fact_id: `fact-${index}`,
+    commission_record_key: row.commission_record_key,
+    source_row_hash: row.source_row_hash,
+    attributed_publisher_id: row.attributed_publisher_id,
+    attributed_placement: row.attributed_placement,
+    attribution_status: row.attribution_status,
+    ...overrides
+  };
+}
+
+function makeOrchRowContexts(actions) {
+  return actions.map((action, index) => {
+    if (action === "insert") {
+      return {
+        new_fact_id: `nf-${index}`,
+        raw_payload_json: `{"raw":${index}}`
+      };
+    }
+
+    if (action === "update") {
+      return { raw_payload_json: `{"raw":${index}}` };
+    }
+
+    return {};
+  });
+}
+
+async function buildBookingOrchestration(actions) {
+  const rows = actions.map((action, index) =>
+    makeBookingOrchRow(index)
+  );
+
+  const facts = actions.map((action, index) => {
+    if (action === "insert") {
+      return null;
+    }
+
+    return makeBookingExistingFact(
+      index,
+      rows[index],
+      action === "update"
+        ? { source_row_hash: `old-hash-${index}` }
+        : {}
+    );
+  });
+
+  const contexts = makeOrchRowContexts(actions);
+  const preflight = await makePreflight({
+    rows_seen: actions.length
+  });
+
+  return {
+    preflight,
+    rows,
+    facts,
+    contexts,
+    context: ORCH_CONTEXT
+  };
+}
+
+async function buildCommissionOrchestration(actions) {
+  const rows = actions.map((action, index) =>
+    makeCommissionOrchRow(index)
+  );
+
+  const facts = actions.map((action, index) => {
+    if (action === "insert") {
+      return null;
+    }
+
+    return makeCommissionExistingFact(
+      index,
+      rows[index],
+      action === "update"
+        ? { source_row_hash: `old-hash-${index}` }
+        : {}
+    );
+  });
+
+  const contexts = makeOrchRowContexts(actions);
+  const preflight = await makePreflight({
+    report_type: "commission",
+    rows_seen: actions.length
+  });
+
+  return {
+    preflight,
+    rows,
+    facts,
+    contexts,
+    context: ORCH_CONTEXT
+  };
+}
+
+test(
+  "orchestration: booking rejects non-array inputs",
+  async () => {
+    const {
+      planSuccessfulBookingIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight({ rows_seen: 0 });
+
+    assert.throws(
+      () =>
+        planSuccessfulBookingIngestion(
+          preflight,
+          "not-an-array",
+          [],
+          [],
+          ORCH_CONTEXT
+        ),
+      /Invalid successful ingestion orchestration input/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulBookingIngestion(
+          preflight,
+          [],
+          "not-an-array",
+          [],
+          ORCH_CONTEXT
+        ),
+      /Invalid successful ingestion orchestration input/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulBookingIngestion(
+          preflight,
+          [],
+          [],
+          "not-an-array",
+          ORCH_CONTEXT
+        ),
+      /Invalid successful ingestion orchestration input/
+    );
+  }
+);
+
+test(
+  "orchestration: commission rejects non-array inputs",
+  async () => {
+    const {
+      planSuccessfulCommissionIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight({
+      report_type: "commission",
+      rows_seen: 0
+    });
+
+    assert.throws(
+      () =>
+        planSuccessfulCommissionIngestion(
+          preflight,
+          null,
+          [],
+          [],
+          ORCH_CONTEXT
+        ),
+      /Invalid successful ingestion orchestration input/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulCommissionIngestion(
+          preflight,
+          [],
+          null,
+          [],
+          ORCH_CONTEXT
+        ),
+      /Invalid successful ingestion orchestration input/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulCommissionIngestion(
+          preflight,
+          [],
+          [],
+          null,
+          ORCH_CONTEXT
+        ),
+      /Invalid successful ingestion orchestration input/
+    );
+  }
+);
+
+test(
+  "orchestration: booking rejects row count mismatches",
+  async () => {
+    const {
+      planSuccessfulBookingIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const row = makeBookingOrchRow(0);
+    const preflight = await makePreflight({ rows_seen: 1 });
+
+    assert.throws(
+      () =>
+        planSuccessfulBookingIngestion(
+          preflight,
+          [],
+          [null],
+          [{}],
+          ORCH_CONTEXT
+        ),
+      /Successful ingestion orchestration row count mismatch/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulBookingIngestion(
+          preflight,
+          [row],
+          [],
+          [{}],
+          ORCH_CONTEXT
+        ),
+      /Successful ingestion orchestration row count mismatch/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulBookingIngestion(
+          preflight,
+          [row],
+          [null],
+          [],
+          ORCH_CONTEXT
+        ),
+      /Successful ingestion orchestration row count mismatch/
+    );
+  }
+);
+
+test(
+  "orchestration: commission rejects row count mismatches",
+  async () => {
+    const {
+      planSuccessfulCommissionIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const row = makeCommissionOrchRow(0);
+    const preflight = await makePreflight({
+      report_type: "commission",
+      rows_seen: 2
+    });
+
+    assert.throws(
+      () =>
+        planSuccessfulCommissionIngestion(
+          preflight,
+          [row],
+          [null],
+          [{}],
+          ORCH_CONTEXT
+        ),
+      /Successful ingestion orchestration row count mismatch/
+    );
+  }
+);
+
+test(
+  "orchestration: booking happy path insert/update/unchanged",
+  async () => {
+    const {
+      planSuccessfulBookingIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const {
+      preflight,
+      rows,
+      facts,
+      contexts,
+      context
+    } = await buildBookingOrchestration([
+      "insert",
+      "update",
+      "unchanged"
+    ]);
+
+    const result = planSuccessfulBookingIngestion(
+      preflight,
+      rows,
+      facts,
+      contexts,
+      context
+    );
+
+    assert.deepEqual(
+      result.state_plans.map((p) => p.state_action),
+      ["insert", "update", "unchanged"]
+    );
+
+    assert.deepEqual(
+      result.persistence_plans.map((p) => p.persistence_action),
+      ["insert", "update_material", "update_observation"]
+    );
+
+    assert.equal(result.state_plans.length, 3);
+    assert.equal(result.persistence_plans.length, 3);
+    assert.deepEqual(Object.keys(result), [
+      "state_plans",
+      "persistence_plans",
+      "ledger_plan"
+    ]);
+
+    assert.equal(result.ledger_plan.rows_seen, 3);
+    assert.equal(result.ledger_plan.rows_inserted, 1);
+    assert.equal(result.ledger_plan.rows_updated, 1);
+    assert.equal(result.ledger_plan.rows_unchanged, 1);
+    assert.equal(result.ledger_plan.rows_rejected, 0);
+    assert.equal(result.ledger_plan.status, "completed");
+  }
+);
+
+test(
+  "orchestration: commission happy path insert/update/unchanged",
+  async () => {
+    const {
+      planSuccessfulCommissionIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const {
+      preflight,
+      rows,
+      facts,
+      contexts,
+      context
+    } = await buildCommissionOrchestration([
+      "insert",
+      "update",
+      "unchanged"
+    ]);
+
+    const result = planSuccessfulCommissionIngestion(
+      preflight,
+      rows,
+      facts,
+      contexts,
+      context
+    );
+
+    assert.deepEqual(
+      result.state_plans.map((p) => p.state_action),
+      ["insert", "update", "unchanged"]
+    );
+
+    assert.deepEqual(
+      result.persistence_plans.map((p) => p.persistence_action),
+      ["insert", "update_material", "update_observation"]
+    );
+
+    assert.equal(result.ledger_plan.rows_seen, 3);
+    assert.equal(result.ledger_plan.rows_inserted, 1);
+    assert.equal(result.ledger_plan.rows_updated, 1);
+    assert.equal(result.ledger_plan.rows_unchanged, 1);
+    assert.equal(result.ledger_plan.rows_rejected, 0);
+    assert.equal(result.ledger_plan.status, "completed");
+  }
+);
+
+test(
+  "orchestration: update_observation maps to rows_unchanged, not rows_updated",
+  async () => {
+    const {
+      planSuccessfulBookingIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const {
+      preflight,
+      rows,
+      facts,
+      contexts,
+      context
+    } = await buildBookingOrchestration([
+      "insert",
+      "update",
+      "unchanged"
+    ]);
+
+    const result = planSuccessfulBookingIngestion(
+      preflight,
+      rows,
+      facts,
+      contexts,
+      context
+    );
+
+    const observationPlans = result.persistence_plans.filter(
+      (p) => p.persistence_action === "update_observation"
+    );
+
+    assert.equal(observationPlans.length, 1);
+    assert.equal(result.ledger_plan.rows_updated, 1);
+    assert.equal(result.ledger_plan.rows_unchanged, 1);
+  }
+);
+
+test(
+  "orchestration: one ingestion run identity spans rows and ledger",
+  async () => {
+    const {
+      planSuccessfulBookingIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const {
+      preflight,
+      rows,
+      facts,
+      contexts,
+      context
+    } = await buildBookingOrchestration([
+      "insert",
+      "update",
+      "unchanged"
+    ]);
+
+    const result = planSuccessfulBookingIngestion(
+      preflight,
+      rows,
+      facts,
+      contexts,
+      context
+    );
+
+    assert.equal(result.ledger_plan.ingestion_run_id, context.ingestion_run_id);
+    assert.equal(result.ledger_plan.started_at, context.started_at);
+    assert.equal(result.ledger_plan.completed_at, context.observed_at);
+
+    for (const plan of result.persistence_plans) {
+      assert.equal(
+        plan.values.last_ingestion_run_id,
+        context.ingestion_run_id
+      );
+      assert.equal(plan.values.last_seen_at, context.observed_at);
+      assert.equal(plan.values.source_ingested_at, context.observed_at);
+
+      if (plan.persistence_action === "insert") {
+        assert.equal(
+          plan.values.first_ingestion_run_id,
+          context.ingestion_run_id
+        );
+        assert.equal(plan.values.first_seen_at, context.observed_at);
+      }
+    }
+  }
+);
+
+test(
+  "orchestration: zero-row booking import still plans ledger",
+  async () => {
+    const {
+      planSuccessfulBookingIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight({ rows_seen: 0 });
+
+    const result = planSuccessfulBookingIngestion(
+      preflight,
+      [],
+      [],
+      [],
+      ORCH_CONTEXT
+    );
+
+    assert.deepEqual(result.state_plans, []);
+    assert.deepEqual(result.persistence_plans, []);
+    assert.equal(result.ledger_plan.rows_seen, 0);
+    assert.equal(result.ledger_plan.rows_inserted, 0);
+    assert.equal(result.ledger_plan.rows_updated, 0);
+    assert.equal(result.ledger_plan.rows_unchanged, 0);
+    assert.equal(result.ledger_plan.rows_rejected, 0);
+    assert.equal(result.ledger_plan.status, "completed");
+  }
+);
+
+test(
+  "orchestration: zero-row commission import still plans ledger",
+  async () => {
+    const {
+      planSuccessfulCommissionIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight({
+      report_type: "commission",
+      rows_seen: 0
+    });
+
+    const result = planSuccessfulCommissionIngestion(
+      preflight,
+      [],
+      [],
+      [],
+      ORCH_CONTEXT
+    );
+
+    assert.deepEqual(result.state_plans, []);
+    assert.deepEqual(result.persistence_plans, []);
+    assert.equal(result.ledger_plan.rows_seen, 0);
+    assert.equal(result.ledger_plan.status, "completed");
+  }
+);
+
+test(
+  "orchestration: child planner errors propagate unchanged",
+  async () => {
+    const {
+      planSuccessfulBookingIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight({ rows_seen: 1 });
+    const row = makeBookingOrchRow(0);
+
+    assert.throws(
+      () =>
+        planSuccessfulBookingIngestion(
+          preflight,
+          [{ ...row, source_record_key: "   " }],
+          [null],
+          [{ new_fact_id: "nf-0", raw_payload_json: "{}" }],
+          ORCH_CONTEXT
+        ),
+      /Invalid booking current-state input: source_record_key/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulBookingIngestion(
+          preflight,
+          [row],
+          [null],
+          [{ new_fact_id: "nf-0", raw_payload_json: "{}" }],
+          { ...ORCH_CONTEXT, observed_at: "   " }
+        ),
+      /Invalid observation context: observed_at/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulBookingIngestion(
+          preflight,
+          [row],
+          [null],
+          [{ raw_payload_json: "{}" }],
+          ORCH_CONTEXT
+        ),
+      /Invalid booking persistence context: new_fact_id/
+    );
+
+    assert.throws(
+      () =>
+        planSuccessfulBookingIngestion(
+          preflight,
+          [row],
+          [null],
+          [{ new_fact_id: "nf-0", raw_payload_json: "{}" }],
+          { ...ORCH_CONTEXT, started_at: "   " }
+        ),
+      /Invalid successful ingestion context: started_at/
+    );
+  }
+);
+
+test(
+  "orchestration: middle row failure returns no partial output",
+  async () => {
+    const {
+      planSuccessfulBookingIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const preflight = await makePreflight({ rows_seen: 3 });
+
+    const rows = [
+      makeBookingOrchRow(0),
+      { ...makeBookingOrchRow(1), source_record_key: "   " },
+      makeBookingOrchRow(2)
+    ];
+
+    let threw = false;
+    try {
+      planSuccessfulBookingIngestion(
+        preflight,
+        rows,
+        [null, null, null],
+        makeOrchRowContexts(["insert", "insert", "insert"]),
+        ORCH_CONTEXT
+      );
+    } catch {
+      threw = true;
+    }
+
+    assert.equal(threw, true);
+  }
+);
+
+test(
+  "orchestration: inputs are not mutated and output is deterministic",
+  async () => {
+    const {
+      planSuccessfulBookingIngestion
+    } = await import(
+      "../reporting-importer-core-v0.1.mjs"
+    );
+
+    const {
+      preflight,
+      rows,
+      facts,
+      contexts,
+      context
+    } = await buildBookingOrchestration([
+      "insert",
+      "update",
+      "unchanged"
+    ]);
+
+    const preflightSnapshot = JSON.stringify(preflight);
+    const rowsSnapshot = JSON.stringify(rows);
+    const factsSnapshot = JSON.stringify(facts);
+    const contextsSnapshot = JSON.stringify(contexts);
+    const contextSnapshot = JSON.stringify(context);
+
+    const first = planSuccessfulBookingIngestion(
+      preflight,
+      rows,
+      facts,
+      contexts,
+      context
+    );
+    const second = planSuccessfulBookingIngestion(
+      preflight,
+      rows,
+      facts,
+      contexts,
+      context
+    );
+
+    assert.deepEqual(first, second);
+    assert.notEqual(first, second);
+
+    assert.equal(JSON.stringify(preflight), preflightSnapshot);
+    assert.equal(JSON.stringify(rows), rowsSnapshot);
+    assert.equal(JSON.stringify(facts), factsSnapshot);
+    assert.equal(JSON.stringify(contexts), contextsSnapshot);
+    assert.equal(JSON.stringify(context), contextSnapshot);
+  }
+);

@@ -1526,3 +1526,107 @@ export function planSuccessfulIngestionRun(
     error_summary: null
   };
 }
+
+function planSuccessfulIngestion(
+  preflight,
+  normalizedRows,
+  existingFacts,
+  rowContexts,
+  context,
+  planCurrentState,
+  planFactPersistence
+) {
+  if (
+    !Array.isArray(normalizedRows) ||
+    !Array.isArray(existingFacts) ||
+    !Array.isArray(rowContexts)
+  ) {
+    throw new Error(
+      "Invalid successful ingestion orchestration input"
+    );
+  }
+
+  if (
+    normalizedRows.length !== preflight?.rows_seen ||
+    existingFacts.length !== preflight?.rows_seen ||
+    rowContexts.length !== preflight?.rows_seen
+  ) {
+    throw new Error(
+      "Successful ingestion orchestration row count mismatch"
+    );
+  }
+
+  const statePlans = [];
+  const persistencePlans = [];
+
+  for (let index = 0; index < normalizedRows.length; index += 1) {
+    const statePlan = planCurrentState(
+      normalizedRows[index],
+      existingFacts[index]
+    );
+
+    const observationMetadata =
+      planCurrentStateObservationMetadata(
+        statePlan,
+        context
+      );
+
+    const persistencePlan = planFactPersistence(
+      normalizedRows[index],
+      statePlan,
+      observationMetadata,
+      rowContexts[index]
+    );
+
+    statePlans.push(statePlan);
+    persistencePlans.push(persistencePlan);
+  }
+
+  const ledgerPlan = planSuccessfulIngestionRun(
+    preflight,
+    statePlans,
+    context
+  );
+
+  return {
+    state_plans: statePlans,
+    persistence_plans: persistencePlans,
+    ledger_plan: ledgerPlan
+  };
+}
+
+export function planSuccessfulBookingIngestion(
+  preflight,
+  normalizedRows,
+  existingFacts,
+  rowContexts,
+  context
+) {
+  return planSuccessfulIngestion(
+    preflight,
+    normalizedRows,
+    existingFacts,
+    rowContexts,
+    context,
+    planBookingCurrentState,
+    planBookingFactPersistence
+  );
+}
+
+export function planSuccessfulCommissionIngestion(
+  preflight,
+  normalizedRows,
+  existingFacts,
+  rowContexts,
+  context
+) {
+  return planSuccessfulIngestion(
+    preflight,
+    normalizedRows,
+    existingFacts,
+    rowContexts,
+    context,
+    planCommissionCurrentState,
+    planCommissionFactPersistence
+  );
+}
