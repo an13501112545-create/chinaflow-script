@@ -1964,3 +1964,321 @@ test(
     assert.equal(JSON.stringify(plan), snapshot);
   }
 );
+
+const LEDGER_INSERT_ORDER = [
+  "ingestion_run_id",
+  "source",
+  "report_type",
+  "report_period_from",
+  "report_period_to",
+  "source_filename",
+  "source_file_sha256",
+  "started_at",
+  "completed_at",
+  "rows_seen",
+  "rows_inserted",
+  "rows_updated",
+  "rows_unchanged",
+  "rows_rejected",
+  "status",
+  "error_summary"
+];
+
+function makeLedgerPlan(overrides = {}) {
+  const plan = {
+    ingestion_run_id: "run-001",
+    source: "trip.com",
+    report_type: "booking",
+    report_period_from: "2026-08-01",
+    report_period_to: "2026-08-20",
+    source_filename: "booking-report.csv",
+    source_file_sha256: "abc123",
+    started_at: "2026-08-01T00:00:00Z",
+    completed_at: "2026-08-01T00:05:00Z",
+    rows_seen: 3,
+    rows_inserted: 1,
+    rows_updated: 1,
+    rows_unchanged: 1,
+    rows_rejected: 0,
+    status: "completed",
+    error_summary: null
+  };
+
+  return Object.assign(plan, overrides);
+}
+
+function makeZeroLedgerPlan(overrides = {}) {
+  const plan = makeLedgerPlan({
+    rows_seen: 0,
+    rows_inserted: 0,
+    rows_updated: 0,
+    rows_unchanged: 0,
+    rows_rejected: 0
+  });
+
+  return Object.assign(plan, overrides);
+}
+
+test(
+  "D1 ledger write statement rejects unavailable database",
+  async () => {
+    const {
+      prepareSuccessfulIngestionRunWriteStatement
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        prepareSuccessfulIngestionRunWriteStatement(
+          null,
+          makeLedgerPlan()
+        ),
+      /D1 binding unavailable/
+    );
+
+    assert.throws(
+      () =>
+        prepareSuccessfulIngestionRunWriteStatement(
+          {},
+          makeLedgerPlan()
+        ),
+      /D1 binding unavailable/
+    );
+  }
+);
+
+test(
+  "D1 ledger write statement rejects malformed ledger plans",
+  async () => {
+    const {
+      prepareSuccessfulIngestionRunWriteStatement
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+
+    const malformed = [
+      null,
+      [],
+      "ledger",
+      123,
+      {},
+      makeLedgerPlan({ ingestion_run_id: "   " }),
+      makeLedgerPlan({ source: "   " }),
+      makeLedgerPlan({ report_type: "   " }),
+      makeLedgerPlan({ source_file_sha256: "   " }),
+      makeLedgerPlan({ started_at: "   " }),
+      makeLedgerPlan({ completed_at: "   " }),
+      makeLedgerPlan({ status: "   " }),
+      makeLedgerPlan({ status: "processing" }),
+      makeLedgerPlan({ status: "COMPLETED" }),
+      makeLedgerPlan({ error_summary: "" }),
+      makeLedgerPlan({ rows_seen: -1 }),
+      makeLedgerPlan({ rows_seen: 1.5 }),
+      makeLedgerPlan({ rows_inserted: -1 }),
+      makeLedgerPlan({ rows_updated: 1.5 }),
+      makeLedgerPlan({ rows_unchanged: "1" }),
+      makeLedgerPlan({ rows_rejected: 1 }),
+      makeLedgerPlan({ rows_seen: 3, rows_unchanged: 2 }),
+      makeLedgerPlan({ report_period_from: 123 }),
+      makeLedgerPlan({ report_period_to: {} }),
+      makeLedgerPlan({ source_filename: [] })
+    ];
+
+    for (const plan of malformed) {
+      assert.throws(
+        () =>
+          prepareSuccessfulIngestionRunWriteStatement(
+            database,
+            plan
+          ),
+        /Invalid successful ingestion D1 plan/
+      );
+    }
+  }
+);
+
+test(
+  "D1 ledger write statement prepares INSERT into report_ingestion_runs with 16 ordered columns",
+  async () => {
+    const {
+      prepareSuccessfulIngestionRunWriteStatement
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+    const statement =
+      prepareSuccessfulIngestionRunWriteStatement(
+        database,
+        makeLedgerPlan()
+      );
+
+    const sql = database.__calls.prepareSql[0];
+
+    assert.match(
+      sql,
+      /INSERT\s+INTO\s+report_ingestion_runs/i
+    );
+    assert.equal(database.__calls.prepareSql.length, 1);
+    assert.equal(database.__calls.bindValues.length, 1);
+    assert.equal(statement, database.__calls.statements[0]);
+
+    const columnsPart = sql.slice(
+      sql.indexOf("(") + 1,
+      sql.indexOf(")")
+    );
+
+    const sqlColumns = columnsPart
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    assert.deepEqual(sqlColumns, LEDGER_INSERT_ORDER);
+
+    for (let i = 1; i <= 16; i += 1) {
+      assert.match(sql, new RegExp(`\\?${i}`));
+    }
+
+    assert.doesNotMatch(sql, /\bUPDATE\b/i);
+    assert.doesNotMatch(sql, /DELETE/i);
+    assert.doesNotMatch(sql, /REPLACE/i);
+    assert.doesNotMatch(sql, /UPSERT/i);
+    assert.doesNotMatch(sql, /ON\s+CONFLICT/i);
+  }
+);
+
+test(
+  "D1 ledger write statement binds 16 values in exact order",
+  async () => {
+    const {
+      prepareSuccessfulIngestionRunWriteStatement
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+    const plan = makeLedgerPlan({
+      ingestion_run_id: " run-with-spaces ",
+      started_at: " started ",
+      completed_at: " completed "
+    });
+
+    prepareSuccessfulIngestionRunWriteStatement(database, plan);
+
+    const binds = database.__calls.bindValues[0];
+    assert.equal(binds.length, 16);
+
+    for (let i = 0; i < LEDGER_INSERT_ORDER.length; i += 1) {
+      const field = LEDGER_INSERT_ORDER[i];
+      assert.equal(
+        binds[i],
+        plan[field],
+        `bind index ${i} (${field})`
+      );
+    }
+  }
+);
+
+test(
+  "D1 ledger write statement preserves optional null values",
+  async () => {
+    const {
+      prepareSuccessfulIngestionRunWriteStatement
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+    const plan = makeLedgerPlan({
+      report_period_from: null,
+      report_period_to: null,
+      source_filename: null
+    });
+
+    prepareSuccessfulIngestionRunWriteStatement(database, plan);
+
+    const binds = database.__calls.bindValues[0];
+
+    assert.equal(binds[3], null);
+    assert.equal(binds[4], null);
+    assert.equal(binds[5], null);
+  }
+);
+
+test(
+  "D1 ledger write statement binds zero-row ledger counters correctly",
+  async () => {
+    const {
+      prepareSuccessfulIngestionRunWriteStatement
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+
+    prepareSuccessfulIngestionRunWriteStatement(
+      database,
+      makeZeroLedgerPlan()
+    );
+
+    const binds = database.__calls.bindValues[0];
+
+    assert.deepEqual(
+      binds.slice(9, 14),
+      [0, 0, 0, 0, 0]
+    );
+  }
+);
+
+test(
+  "D1 ledger write statement binds status completed and error_summary null",
+  async () => {
+    const {
+      prepareSuccessfulIngestionRunWriteStatement
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+
+    prepareSuccessfulIngestionRunWriteStatement(
+      database,
+      makeLedgerPlan()
+    );
+
+    const binds = database.__calls.bindValues[0];
+
+    assert.equal(binds[14], "completed");
+    assert.equal(binds[15], null);
+  }
+);
+
+test(
+  "D1 ledger write statement returns exact bind() result and executes nothing",
+  async () => {
+    const {
+      prepareSuccessfulIngestionRunWriteStatement
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+    const plan = makeLedgerPlan();
+    const snapshot = JSON.stringify(plan);
+
+    const statement =
+      prepareSuccessfulIngestionRunWriteStatement(database, plan);
+
+    assert.equal(statement, database.__calls.statements[0]);
+    assert.equal(database.__calls.prepareSql.length, 1);
+    assert.equal(database.__calls.bindValues.length, 1);
+    assert.equal(database.__calls.runCalls, 0);
+    assert.equal(database.__calls.batchCalls, 0);
+    assert.equal(database.__calls.execCalls, 0);
+    assert.deepEqual(database.__calls.readCalls, []);
+    assert.equal(JSON.stringify(plan), snapshot);
+  }
+);

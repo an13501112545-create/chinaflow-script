@@ -485,3 +485,191 @@ export function prepareCommissionFactWriteStatement(database, persistencePlan) {
       persistencePlan.commission_fact_id
     );
 }
+
+const LEDGER_INSERT_COLUMNS = [
+  "ingestion_run_id",
+  "source",
+  "report_type",
+  "report_period_from",
+  "report_period_to",
+  "source_filename",
+  "source_file_sha256",
+  "started_at",
+  "completed_at",
+  "rows_seen",
+  "rows_inserted",
+  "rows_updated",
+  "rows_unchanged",
+  "rows_rejected",
+  "status",
+  "error_summary"
+];
+
+const LEDGER_INSERT_SQL =
+  buildInsertSql("report_ingestion_runs", LEDGER_INSERT_COLUMNS);
+
+function isOptionalStringOrNull(value) {
+  return (
+    value === null ||
+    typeof value === "string"
+  );
+}
+
+function isRequiredString(value) {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0
+  );
+}
+
+function isNonNegativeInteger(value) {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0
+  );
+}
+
+function assertLedgerPlan(ledgerPlan) {
+  if (
+    ledgerPlan === null ||
+    typeof ledgerPlan !== "object" ||
+    Array.isArray(ledgerPlan)
+  ) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isRequiredString(ledgerPlan.ingestion_run_id)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isRequiredString(ledgerPlan.source)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isRequiredString(ledgerPlan.report_type)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isRequiredString(ledgerPlan.source_file_sha256)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isRequiredString(ledgerPlan.started_at)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isRequiredString(ledgerPlan.completed_at)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isRequiredString(ledgerPlan.status)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (ledgerPlan.status !== "completed") {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (ledgerPlan.error_summary !== null) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isNonNegativeInteger(ledgerPlan.rows_seen)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isNonNegativeInteger(ledgerPlan.rows_inserted)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isNonNegativeInteger(ledgerPlan.rows_updated)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isNonNegativeInteger(ledgerPlan.rows_unchanged)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isNonNegativeInteger(ledgerPlan.rows_rejected)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (ledgerPlan.rows_rejected !== 0) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (
+    ledgerPlan.rows_inserted +
+      ledgerPlan.rows_updated +
+      ledgerPlan.rows_unchanged +
+      ledgerPlan.rows_rejected !==
+    ledgerPlan.rows_seen
+  ) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isOptionalStringOrNull(ledgerPlan.report_period_from)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isOptionalStringOrNull(ledgerPlan.report_period_to)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+
+  if (!isOptionalStringOrNull(ledgerPlan.source_filename)) {
+    throw new Error(
+      "Invalid successful ingestion D1 plan"
+    );
+  }
+}
+
+export function prepareSuccessfulIngestionRunWriteStatement(
+  database,
+  ledgerPlan
+) {
+  assertDatabaseBinding(database);
+  assertLedgerPlan(ledgerPlan);
+
+  return database
+    .prepare(LEDGER_INSERT_SQL)
+    .bind(...collectValues(ledgerPlan, LEDGER_INSERT_COLUMNS));
+}
