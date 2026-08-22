@@ -9,7 +9,8 @@ function makeFakeDatabase(config = {}) {
     runCalls: 0,
     batchCalls: 0,
     execCalls: 0,
-    statements: []
+    statements: [],
+    batchStatements: []
   };
 
   const database = {
@@ -44,8 +45,18 @@ function makeFakeDatabase(config = {}) {
       return config.runResult;
     },
 
-    batch() {
+    batch(statements) {
       calls.batchCalls += 1;
+      calls.batchStatements.push(statements);
+
+      if (config.batchError !== undefined) {
+        throw config.batchError;
+      }
+
+      if (config.batchRejection !== undefined) {
+        return Promise.reject(config.batchRejection);
+      }
+
       return config.batchResult;
     },
 
@@ -2280,5 +2291,1039 @@ test(
     assert.equal(database.__calls.execCalls, 0);
     assert.deepEqual(database.__calls.readCalls, []);
     assert.equal(JSON.stringify(plan), snapshot);
+  }
+);
+
+const BATCH_RUN_ID = "run-batch-001";
+const BATCH_STARTED_AT = "2026-08-22T00:00:00.000Z";
+const BATCH_OBSERVED_AT = "2026-08-22T00:05:00.000Z";
+
+const BATCH_BOOKING_ROW = {
+  source_record_key: "booking-key",
+  source_row_hash: "hash-1",
+  source: "trip.com",
+  source_order_id: "BOOKING-001",
+  aid: "10021103",
+  sid: "123456",
+  sid_name: "sid-name",
+  trip_sub1: "flightflex_flights_yyz_bjs_test",
+  trip_sub3: "sub3",
+  attributed_publisher_id: "flightflex",
+  attributed_placement: "placement-a",
+  attribution_status: "matched",
+  raw_product_line: "htl",
+  normalized_product: "hotel",
+  raw_order_status: "S",
+  normalized_order_status: "successful",
+  booking_amount_raw: "100.00",
+  booking_amount_micros: 100000000,
+  currency: null,
+  order_date: "2026-08-01",
+  product_start_date: "2026-08-05",
+  product_end_date: "2026-08-08",
+  booking_window: 3,
+  departure_city: "YYZ",
+  departure_country: "CA",
+  arrival_city: "BJS",
+  arrival_country: "CN",
+  order_platform: "web",
+  booker_region: "CA",
+  ouid: "ouid-1"
+};
+
+const BATCH_COMMISSION_ROW = {
+  commission_record_key: "commission-key",
+  source_row_hash: "hash-1",
+  source: "trip.com",
+  source_order_id: "BOOKING-001",
+  aid: "10021103",
+  sid: "123456",
+  sid_name: "sid-name",
+  trip_sub1: "flightflex_flights_yyz_bjs_test",
+  trip_sub3: "sub3",
+  attributed_publisher_id: "flightflex",
+  attributed_placement: "placement-a",
+  attribution_status: "matched",
+  raw_product_line: "htl",
+  normalized_product: "hotel",
+  sub_order_type: "sub-order-type",
+  raw_order_status: "S",
+  normalized_order_status: "successful",
+  raw_commission_status: "SETTLED",
+  normalized_commission_status: "settled",
+  booking_amount_raw: "200.00",
+  booking_amount_micros: 200000000,
+  commission_amount_raw: "-5.00",
+  commission_amount_micros: -5000000,
+  currency: null,
+  commission_month: "2026-08",
+  order_date: "2026-08-01",
+  check_out_or_issue_date: "2026-08-08",
+  ratio_raw: "0.05",
+  plan_type: "standard",
+  region: "CA",
+  ouid: "ouid-1"
+};
+
+function makeBatchLedger(overrides = {}) {
+  return makeLedgerPlan({
+    ingestion_run_id: BATCH_RUN_ID,
+    started_at: BATCH_STARTED_AT,
+    completed_at: BATCH_OBSERVED_AT,
+    ...overrides
+  });
+}
+
+function makeZeroBatchLedger(overrides = {}) {
+  return makeBatchLedger({
+    rows_seen: 0,
+    rows_inserted: 0,
+    rows_updated: 0,
+    rows_unchanged: 0,
+    rows_rejected: 0,
+    ...overrides
+  });
+}
+
+function makeInsertValues() {
+  return {
+    first_seen_at: BATCH_OBSERVED_AT,
+    last_seen_at: BATCH_OBSERVED_AT,
+    first_ingestion_run_id: BATCH_RUN_ID,
+    last_ingestion_run_id: BATCH_RUN_ID,
+    source_ingested_at: BATCH_OBSERVED_AT
+  };
+}
+
+function makeLatestValues() {
+  return {
+    last_seen_at: BATCH_OBSERVED_AT,
+    last_ingestion_run_id: BATCH_RUN_ID,
+    source_ingested_at: BATCH_OBSERVED_AT
+  };
+}
+
+async function buildRealBookingBatch(actions) {
+  const core = await import(
+    "../reporting-importer-core-v0.1.mjs"
+  );
+
+  const context = {
+    ingestion_run_id: BATCH_RUN_ID,
+    started_at: BATCH_STARTED_AT,
+    observed_at: BATCH_OBSERVED_AT
+  };
+
+  const preflight = await core.createIngestionRunPreflight({
+    source: "trip.com",
+    report_type: "booking",
+    source_filename: "booking-report.csv",
+    file_bytes: new TextEncoder().encode("booking-v0.1"),
+    rows_seen: actions.length
+  });
+
+  const statePlans = [];
+  const persistencePlans = [];
+
+  let index = 0;
+  for (const action of actions) {
+    const row = {
+      ...BATCH_BOOKING_ROW,
+      source_record_key: `booking-key-${index}`
+    };
+
+    let existingFact = null;
+    if (action !== "insert") {
+      existingFact = {
+        booking_fact_id: `bf-${index}`,
+        source_record_key: row.source_record_key,
+        source_row_hash: row.source_row_hash,
+        attributed_publisher_id: row.attributed_publisher_id,
+        attributed_placement: row.attributed_placement,
+        attribution_status:
+          action === "update"
+            ? "unmatched"
+            : row.attribution_status
+      };
+    }
+
+    const statePlan = core.planBookingCurrentState(
+      row,
+      existingFact
+    );
+    const observationMetadata =
+      core.planCurrentStateObservationMetadata(statePlan, context);
+    const persistencePlan = core.planBookingFactPersistence(
+      row,
+      statePlan,
+      observationMetadata,
+      {
+        new_fact_id: `nf-${index}`,
+        raw_payload_json: `{"raw":${index}}`
+      }
+    );
+
+    statePlans.push(statePlan);
+    persistencePlans.push(persistencePlan);
+    index += 1;
+  }
+
+  const ledgerPlan = core.planSuccessfulIngestionRun(
+    preflight,
+    statePlans,
+    context
+  );
+
+  return { ledgerPlan, persistencePlans };
+}
+
+async function buildRealCommissionBatch(actions) {
+  const core = await import(
+    "../reporting-importer-core-v0.1.mjs"
+  );
+
+  const context = {
+    ingestion_run_id: BATCH_RUN_ID,
+    started_at: BATCH_STARTED_AT,
+    observed_at: BATCH_OBSERVED_AT
+  };
+
+  const preflight = await core.createIngestionRunPreflight({
+    source: "trip.com",
+    report_type: "commission",
+    source_filename: "commission-report.csv",
+    file_bytes: new TextEncoder().encode("commission-v0.1"),
+    rows_seen: actions.length
+  });
+
+  const statePlans = [];
+  const persistencePlans = [];
+
+  let index = 0;
+  for (const action of actions) {
+    const row = {
+      ...BATCH_COMMISSION_ROW,
+      commission_record_key: `commission-key-${index}`
+    };
+
+    let existingFact = null;
+    if (action !== "insert") {
+      existingFact = {
+        commission_fact_id: `cf-${index}`,
+        commission_record_key: row.commission_record_key,
+        source_row_hash: row.source_row_hash,
+        attributed_publisher_id: row.attributed_publisher_id,
+        attributed_placement: row.attributed_placement,
+        attribution_status:
+          action === "update"
+            ? "unmatched"
+            : row.attribution_status
+      };
+    }
+
+    const statePlan = core.planCommissionCurrentState(
+      row,
+      existingFact
+    );
+    const observationMetadata =
+      core.planCurrentStateObservationMetadata(statePlan, context);
+    const persistencePlan = core.planCommissionFactPersistence(
+      row,
+      statePlan,
+      observationMetadata,
+      {
+        new_fact_id: `nf-${index}`,
+        raw_payload_json: `{"raw":${index}}`
+      }
+    );
+
+    statePlans.push(statePlan);
+    persistencePlans.push(persistencePlan);
+    index += 1;
+  }
+
+  const ledgerPlan = core.planSuccessfulIngestionRun(
+    preflight,
+    statePlans,
+    context
+  );
+
+  return { ledgerPlan, persistencePlans };
+}
+
+test(
+  "D1 booking batch rejects unavailable database",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          null,
+          makeBatchLedger(),
+          []
+        ),
+      /D1 binding unavailable/
+    );
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          {},
+          makeBatchLedger(),
+          []
+        ),
+      /D1 binding unavailable/
+    );
+  }
+);
+
+test(
+  "D1 commission batch rejects unavailable database",
+  async () => {
+    const {
+      executeSuccessfulCommissionIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    assert.throws(
+      () =>
+        executeSuccessfulCommissionIngestionBatch(
+          null,
+          makeBatchLedger(),
+          []
+        ),
+      /D1 binding unavailable/
+    );
+
+    assert.throws(
+      () =>
+        executeSuccessfulCommissionIngestionBatch(
+          {},
+          makeBatchLedger(),
+          []
+        ),
+      /D1 binding unavailable/
+    );
+  }
+);
+
+test(
+  "D1 batch rejects database with prepare but no batch",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = {
+      prepare() {
+        return {
+          bind() {
+            return {};
+          }
+        };
+      }
+    };
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          database,
+          makeBatchLedger(),
+          []
+        ),
+      /D1 batch unavailable/
+    );
+  }
+);
+
+test(
+  "D1 batch rejects non-array and row-count-mismatched persistence plans",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          database,
+          makeZeroBatchLedger(),
+          "not-an-array"
+        ),
+      /Successful ingestion batch row count mismatch/
+    );
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          database,
+          makeBatchLedger({ rows_seen: 3 }),
+          []
+        ),
+      /Successful ingestion batch row count mismatch/
+    );
+
+    assert.equal(database.__calls.batchCalls, 0);
+  }
+);
+
+test(
+  "D1 booking batch rejects counter mismatch",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+
+    const plan = {
+      persistence_action: "insert",
+      booking_fact_id: "bf-1",
+      values: makeInsertValues()
+    };
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          database,
+          makeBatchLedger({
+            rows_seen: 1,
+            rows_inserted: 0,
+            rows_updated: 1,
+            rows_unchanged: 0
+          }),
+          [plan]
+        ),
+      /Successful ingestion batch counter mismatch/
+    );
+
+    assert.equal(database.__calls.batchCalls, 0);
+  }
+);
+
+test(
+  "D1 commission batch rejects counter mismatch",
+  async () => {
+    const {
+      executeSuccessfulCommissionIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+
+    const plan = {
+      persistence_action: "update_material",
+      commission_fact_id: "cf-1",
+      values: makeLatestValues()
+    };
+
+    assert.throws(
+      () =>
+        executeSuccessfulCommissionIngestionBatch(
+          database,
+          makeBatchLedger({
+            rows_seen: 1,
+            rows_inserted: 1,
+            rows_updated: 0,
+            rows_unchanged: 0
+          }),
+          [plan]
+        ),
+      /Successful ingestion batch counter mismatch/
+    );
+
+    assert.equal(database.__calls.batchCalls, 0);
+  }
+);
+
+test(
+  "D1 batch counts update_observation as rows_unchanged, not rows_updated",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+
+    const plan = {
+      persistence_action: "update_observation",
+      booking_fact_id: "bf-1",
+      values: makeLatestValues()
+    };
+
+    executeSuccessfulBookingIngestionBatch(
+      database,
+      makeBatchLedger({
+        rows_seen: 1,
+        rows_inserted: 0,
+        rows_updated: 0,
+        rows_unchanged: 1
+      }),
+      [plan]
+    );
+
+    assert.equal(database.__calls.batchCalls, 1);
+
+    const wrongLedger = makeBatchLedger({
+      rows_seen: 1,
+      rows_inserted: 0,
+      rows_updated: 1,
+      rows_unchanged: 0
+    });
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          makeFakeDatabase({}),
+          wrongLedger,
+          [plan]
+        ),
+      /Successful ingestion batch counter mismatch/
+    );
+  }
+);
+
+test(
+  "D1 batch rejects unknown persistence_action",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+
+    const plan = {
+      persistence_action: "delete",
+      booking_fact_id: "bf-1",
+      values: makeLatestValues()
+    };
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          database,
+          makeBatchLedger({
+            rows_seen: 1,
+            rows_inserted: 0,
+            rows_updated: 0,
+            rows_unchanged: 1
+          }),
+          [plan]
+        ),
+      /Successful ingestion batch counter mismatch/
+    );
+
+    assert.equal(database.__calls.batchCalls, 0);
+  }
+);
+
+test(
+  "D1 batch rejects run identity mismatch",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+
+    const latestWrongRun = {
+      persistence_action: "update_observation",
+      booking_fact_id: "bf-1",
+      values: {
+        ...makeLatestValues(),
+        last_ingestion_run_id: "other-run"
+      }
+    };
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          database,
+          makeBatchLedger({
+            rows_seen: 1,
+            rows_inserted: 0,
+            rows_updated: 0,
+            rows_unchanged: 1
+          }),
+          [latestWrongRun]
+        ),
+      /Successful ingestion batch run mismatch/
+    );
+
+    const insertWrongFirstRun = {
+      persistence_action: "insert",
+      booking_fact_id: "bf-1",
+      values: {
+        ...makeInsertValues(),
+        first_ingestion_run_id: "other-run"
+      }
+    };
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          makeFakeDatabase({}),
+          makeBatchLedger({
+            rows_seen: 1,
+            rows_inserted: 1,
+            rows_updated: 0,
+            rows_unchanged: 0
+          }),
+          [insertWrongFirstRun]
+        ),
+      /Successful ingestion batch run mismatch/
+    );
+  }
+);
+
+test(
+  "D1 batch rejects observation boundary mismatch",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const latestWrongSeen = {
+      persistence_action: "update_observation",
+      booking_fact_id: "bf-1",
+      values: {
+        ...makeLatestValues(),
+        last_seen_at: "other-time"
+      }
+    };
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          makeFakeDatabase({}),
+          makeBatchLedger({
+            rows_seen: 1,
+            rows_inserted: 0,
+            rows_updated: 0,
+            rows_unchanged: 1
+          }),
+          [latestWrongSeen]
+        ),
+      /Successful ingestion batch observation mismatch/
+    );
+
+    const latestWrongIngested = {
+      persistence_action: "update_observation",
+      booking_fact_id: "bf-1",
+      values: {
+        ...makeLatestValues(),
+        source_ingested_at: "other-time"
+      }
+    };
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          makeFakeDatabase({}),
+          makeBatchLedger({
+            rows_seen: 1,
+            rows_inserted: 0,
+            rows_updated: 0,
+            rows_unchanged: 1
+          }),
+          [latestWrongIngested]
+        ),
+      /Successful ingestion batch observation mismatch/
+    );
+
+    const insertWrongFirstSeen = {
+      persistence_action: "insert",
+      booking_fact_id: "bf-1",
+      values: {
+        ...makeInsertValues(),
+        first_seen_at: "other-time"
+      }
+    };
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          makeFakeDatabase({}),
+          makeBatchLedger({
+            rows_seen: 1,
+            rows_inserted: 1,
+            rows_updated: 0,
+            rows_unchanged: 0
+          }),
+          [insertWrongFirstSeen]
+        ),
+      /Successful ingestion batch observation mismatch/
+    );
+  }
+);
+
+test(
+  "D1 booking batch happy path: ledger first, facts after, order preserved",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const { ledgerPlan, persistencePlans } =
+      await buildRealBookingBatch([
+        "insert",
+        "update",
+        "unchanged"
+      ]);
+
+    const database = makeFakeDatabase({});
+    const result = executeSuccessfulBookingIngestionBatch(
+      database,
+      ledgerPlan,
+      persistencePlans
+    );
+
+    assert.equal(database.__calls.batchCalls, 1);
+    assert.equal(database.__calls.runCalls, 0);
+    assert.equal(database.__calls.execCalls, 0);
+    assert.deepEqual(database.__calls.readCalls, []);
+
+    const statements = database.__calls.batchStatements[0];
+    assert.equal(statements.length, 4);
+    assert.equal(statements[0], database.__calls.statements[0]);
+    assert.match(
+      database.__calls.prepareSql[0],
+      /INSERT\s+INTO\s+report_ingestion_runs/i
+    );
+
+    for (let i = 0; i < persistencePlans.length; i += 1) {
+      assert.equal(
+        statements[i + 1],
+        database.__calls.statements[i + 1]
+      );
+    }
+
+    const factSqls = database.__calls.prepareSql.slice(1);
+    assert.match(factSqls[0], /INSERT\s+INTO\s+trip_bookings/i);
+    assert.match(factSqls[1], /UPDATE\s+trip_bookings/i);
+    assert.match(factSqls[2], /UPDATE\s+trip_bookings/i);
+
+    assert.equal(result, undefined);
+  }
+);
+
+test(
+  "D1 commission batch happy path: ledger first, facts after, order preserved",
+  async () => {
+    const {
+      executeSuccessfulCommissionIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const { ledgerPlan, persistencePlans } =
+      await buildRealCommissionBatch([
+        "insert",
+        "update",
+        "unchanged"
+      ]);
+
+    const database = makeFakeDatabase({});
+    executeSuccessfulCommissionIngestionBatch(
+      database,
+      ledgerPlan,
+      persistencePlans
+    );
+
+    assert.equal(database.__calls.batchCalls, 1);
+    assert.equal(database.__calls.runCalls, 0);
+    assert.equal(database.__calls.execCalls, 0);
+    assert.deepEqual(database.__calls.readCalls, []);
+
+    const statements = database.__calls.batchStatements[0];
+    assert.equal(statements.length, 4);
+    assert.equal(statements[0], database.__calls.statements[0]);
+    assert.match(
+      database.__calls.prepareSql[0],
+      /INSERT\s+INTO\s+report_ingestion_runs/i
+    );
+
+    const factSqls = database.__calls.prepareSql.slice(1);
+    assert.match(factSqls[0], /INSERT\s+INTO\s+trip_commissions/i);
+    assert.match(factSqls[1], /UPDATE\s+trip_commissions/i);
+    assert.match(factSqls[2], /UPDATE\s+trip_commissions/i);
+  }
+);
+
+test(
+  "D1 batch preserves persistence plan order exactly",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const { ledgerPlan, persistencePlans } =
+      await buildRealBookingBatch([
+        "update",
+        "insert",
+        "unchanged"
+      ]);
+
+    const database = makeFakeDatabase({});
+    executeSuccessfulBookingIngestionBatch(
+      database,
+      ledgerPlan,
+      persistencePlans
+    );
+
+    const factSqls = database.__calls.prepareSql.slice(1);
+    assert.match(factSqls[0], /UPDATE\s+trip_bookings/i);
+    assert.match(factSqls[1], /INSERT\s+INTO\s+trip_bookings/i);
+    assert.match(factSqls[2], /UPDATE\s+trip_bookings/i);
+  }
+);
+
+test(
+  "D1 batch returns exact batch return value unchanged",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const sentinel = { success: true };
+    const database = makeFakeDatabase({
+      batchResult: sentinel
+    });
+
+    const result = executeSuccessfulBookingIngestionBatch(
+      database,
+      makeZeroBatchLedger(),
+      []
+    );
+
+    assert.equal(result, sentinel);
+    assert.equal(database.__calls.batchCalls, 1);
+  }
+);
+
+test(
+  "D1 batch propagates thrown error unchanged and does not retry",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const boom = new Error("d1-boom");
+    const database = makeFakeDatabase({ batchError: boom });
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          database,
+          makeZeroBatchLedger(),
+          []
+        ),
+      /d1-boom/
+    );
+
+    assert.equal(database.__calls.batchCalls, 1);
+  }
+);
+
+test(
+  "D1 batch propagates rejection unchanged and does not retry",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({
+      batchRejection: new Error("d1-reject")
+    });
+
+    await assert.rejects(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          database,
+          makeZeroBatchLedger(),
+          []
+        ),
+      /d1-reject/
+    );
+
+    assert.equal(database.__calls.batchCalls, 1);
+  }
+);
+
+test(
+  "D1 zero-row booking import batches ledger only",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+    executeSuccessfulBookingIngestionBatch(
+      database,
+      makeZeroBatchLedger(),
+      []
+    );
+
+    assert.equal(database.__calls.batchCalls, 1);
+    assert.equal(database.__calls.batchStatements[0].length, 1);
+    assert.equal(
+      database.__calls.batchStatements[0][0],
+      database.__calls.statements[0]
+    );
+    assert.match(
+      database.__calls.prepareSql[0],
+      /INSERT\s+INTO\s+report_ingestion_runs/i
+    );
+  }
+);
+
+test(
+  "D1 zero-row commission import batches ledger only",
+  async () => {
+    const {
+      executeSuccessfulCommissionIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+    executeSuccessfulCommissionIngestionBatch(
+      database,
+      makeZeroBatchLedger(),
+      []
+    );
+
+    assert.equal(database.__calls.batchCalls, 1);
+    assert.equal(database.__calls.batchStatements[0].length, 1);
+    assert.equal(
+      database.__calls.batchStatements[0][0],
+      database.__calls.statements[0]
+    );
+  }
+);
+
+test(
+  "D1 batch still enforces ledger constructor validation",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          database,
+          makeBatchLedger({ status: "processing" }),
+          []
+        ),
+      /Invalid successful ingestion D1 plan/
+    );
+
+    assert.equal(database.__calls.batchCalls, 0);
+  }
+);
+
+test(
+  "D1 batch still enforces fact constructor validation",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const database = makeFakeDatabase({});
+
+    const plan = {
+      persistence_action: "insert",
+      booking_fact_id: "   ",
+      values: makeInsertValues()
+    };
+
+    assert.throws(
+      () =>
+        executeSuccessfulBookingIngestionBatch(
+          database,
+          makeBatchLedger({
+            rows_seen: 1,
+            rows_inserted: 1,
+            rows_updated: 0,
+            rows_unchanged: 0
+          }),
+          [plan]
+        ),
+      /Invalid booking D1 persistence plan/
+    );
+
+    assert.equal(database.__calls.batchCalls, 0);
+  }
+);
+
+test(
+  "D1 batch does not mutate ledgerPlan or persistencePlans",
+  async () => {
+    const {
+      executeSuccessfulBookingIngestionBatch
+    } = await import(
+      "../reporting-importer-d1-v0.1.mjs"
+    );
+
+    const { ledgerPlan, persistencePlans } =
+      await buildRealBookingBatch([
+        "insert",
+        "update",
+        "unchanged"
+      ]);
+
+    const ledgerSnapshot = JSON.stringify(ledgerPlan);
+    const plansSnapshot = JSON.stringify(persistencePlans);
+
+    executeSuccessfulBookingIngestionBatch(
+      makeFakeDatabase({}),
+      ledgerPlan,
+      persistencePlans
+    );
+
+    assert.equal(JSON.stringify(ledgerPlan), ledgerSnapshot);
+    assert.equal(JSON.stringify(persistencePlans), plansSnapshot);
   }
 );

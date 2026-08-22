@@ -673,3 +673,198 @@ export function prepareSuccessfulIngestionRunWriteStatement(
     .prepare(LEDGER_INSERT_SQL)
     .bind(...collectValues(ledgerPlan, LEDGER_INSERT_COLUMNS));
 }
+
+function assertBatchBinding(database) {
+  assertDatabaseBinding(database);
+
+  if (typeof database.batch !== "function") {
+    throw new Error(
+      "D1 batch unavailable"
+    );
+  }
+}
+
+function isPersistencePlan(plan) {
+  return (
+    plan !== null &&
+    typeof plan === "object" &&
+    !Array.isArray(plan)
+  );
+}
+
+function countPersistenceActions(persistencePlans) {
+  let insertCount = 0;
+  let updateMaterialCount = 0;
+  let updateObservationCount = 0;
+
+  for (const plan of persistencePlans) {
+    if (!isPersistencePlan(plan)) {
+      throw new Error(
+        "Successful ingestion batch counter mismatch"
+      );
+    }
+
+    if (plan.persistence_action === "insert") {
+      insertCount += 1;
+    } else if (plan.persistence_action === "update_material") {
+      updateMaterialCount += 1;
+    } else if (plan.persistence_action === "update_observation") {
+      updateObservationCount += 1;
+    } else {
+      throw new Error(
+        "Successful ingestion batch counter mismatch"
+      );
+    }
+  }
+
+  return {
+    insertCount,
+    updateMaterialCount,
+    updateObservationCount
+  };
+}
+
+function assertBatchRunAndObservationConsistency(
+  persistencePlans,
+  ledgerPlan
+) {
+  for (const plan of persistencePlans) {
+    const values = plan.values;
+
+    if (!isPersistencePlan(values)) {
+      throw new Error(
+        "Successful ingestion batch run mismatch"
+      );
+    }
+
+    if (
+      values.last_ingestion_run_id !==
+      ledgerPlan.ingestion_run_id
+    ) {
+      throw new Error(
+        "Successful ingestion batch run mismatch"
+      );
+    }
+
+    if (
+      plan.persistence_action === "insert" &&
+      values.first_ingestion_run_id !==
+        ledgerPlan.ingestion_run_id
+    ) {
+      throw new Error(
+        "Successful ingestion batch run mismatch"
+      );
+    }
+
+    if (
+      values.last_seen_at !==
+      ledgerPlan.completed_at
+    ) {
+      throw new Error(
+        "Successful ingestion batch observation mismatch"
+      );
+    }
+
+    if (
+      values.source_ingested_at !==
+      ledgerPlan.completed_at
+    ) {
+      throw new Error(
+        "Successful ingestion batch observation mismatch"
+      );
+    }
+
+    if (
+      plan.persistence_action === "insert" &&
+      values.first_seen_at !==
+        ledgerPlan.completed_at
+    ) {
+      throw new Error(
+        "Successful ingestion batch observation mismatch"
+      );
+    }
+  }
+}
+
+function executeSuccessfulIngestionBatch(
+  database,
+  ledgerPlan,
+  persistencePlans,
+  prepareFactStatement
+) {
+  assertBatchBinding(database);
+
+  const ledgerStatement =
+    prepareSuccessfulIngestionRunWriteStatement(
+      database,
+      ledgerPlan
+    );
+
+  if (!Array.isArray(persistencePlans)) {
+    throw new Error(
+      "Successful ingestion batch row count mismatch"
+    );
+  }
+
+  if (persistencePlans.length !== ledgerPlan.rows_seen) {
+    throw new Error(
+      "Successful ingestion batch row count mismatch"
+    );
+  }
+
+  const {
+    insertCount,
+    updateMaterialCount,
+    updateObservationCount
+  } = countPersistenceActions(persistencePlans);
+
+  if (
+    insertCount !== ledgerPlan.rows_inserted ||
+    updateMaterialCount !== ledgerPlan.rows_updated ||
+    updateObservationCount !== ledgerPlan.rows_unchanged
+  ) {
+    throw new Error(
+      "Successful ingestion batch counter mismatch"
+    );
+  }
+
+  assertBatchRunAndObservationConsistency(
+    persistencePlans,
+    ledgerPlan
+  );
+
+  const factStatements = persistencePlans.map(
+    (plan) => prepareFactStatement(database, plan)
+  );
+
+  return database.batch([
+    ledgerStatement,
+    ...factStatements
+  ]);
+}
+
+export function executeSuccessfulBookingIngestionBatch(
+  database,
+  ledgerPlan,
+  persistencePlans
+) {
+  return executeSuccessfulIngestionBatch(
+    database,
+    ledgerPlan,
+    persistencePlans,
+    prepareBookingFactWriteStatement
+  );
+}
+
+export function executeSuccessfulCommissionIngestionBatch(
+  database,
+  ledgerPlan,
+  persistencePlans
+) {
+  return executeSuccessfulIngestionBatch(
+    database,
+    ledgerPlan,
+    persistencePlans,
+    prepareCommissionFactWriteStatement
+  );
+}
