@@ -1,0 +1,14 @@
+{
+  "name": "chinaflow-reporting-importer-v0-1",
+  "main": "reporting-importer-worker-v0.1.mjs",
+  "compatibility_date": "2026-08-14",
+
+  "d1_databases": [
+    {
+      "binding": "CHINAFLOW_EVENTS",
+      "database_name": "chinaflow-events-v0-1",
+      "database_id": "838917da-3fb8-437e-bc00-caff178798e8",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
