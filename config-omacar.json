@@ -51,6 +51,21 @@
       "subtitle": "Compare Guangzhou hotel options and book your stay on Trip.com",
       "icon": "▣",
       "url": "https://www.trip.com/hotels/guangzhou-hotels-list-32/?Allianceid=10021103&SID=328317298&trip_sub1=omacar_guangzhou_canton_fair_hotels_test&trip_sub3=D19217690"
+    },
+    {
+      "id": "omacar-shenzhen-business-hotels",
+      "enabled": true,
+      "match": {
+        "type": "path",
+        "value": "/post/best-business-hotels-in-shenzhen-for-international-business-travelers"
+      },
+      "product": "hotel",
+      "placement": "omacar_shenzhen_business_hotels_test",
+      "eyebrow": "PLAN YOUR CHINA TRIP",
+      "title": "Find Hotels in Shenzhen",
+      "subtitle": "Compare Shenzhen hotel options and book your stay on Trip.com",
+      "icon": "▣",
+      "url": "https://www.trip.com/hotels/shenzhen-hotels-list-30/?Allianceid=10021103&SID=328317298&trip_sub1=omacar_shenzhen_business_hotels_test&trip_sub3=D19217690"
     }
   ],
   "offers": []
