@@ -36,6 +36,21 @@
       "subtitle": "Compare Beijing hotel options and book your stay on Trip.com",
       "icon": "▣",
       "url": "https://www.trip.com/hotels/beijing-hotels-list-1/?Allianceid=10021103&SID=328317298&trip_sub1=omacar_beijing_business_hotels_test&trip_sub3=D19217690"
+    },
+    {
+      "id": "omacar-guangzhou-canton-fair-hotels",
+      "enabled": true,
+      "match": {
+        "type": "path",
+        "value": "/post/best-business-hotels-in-guangzhou-for-canton-fair-travelers"
+      },
+      "product": "hotel",
+      "placement": "omacar_guangzhou_canton_fair_hotels_test",
+      "eyebrow": "PLAN YOUR CHINA TRIP",
+      "title": "Find Hotels in Guangzhou",
+      "subtitle": "Compare Guangzhou hotel options and book your stay on Trip.com",
+      "icon": "▣",
+      "url": "https://www.trip.com/hotels/guangzhou-hotels-list-32/?Allianceid=10021103&SID=328317298&trip_sub1=omacar_guangzhou_canton_fair_hotels_test&trip_sub3=D19217690"
     }
   ],
   "offers": []
