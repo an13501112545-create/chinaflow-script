@@ -1,0 +1,27 @@
+{
+  "version": "0.1",
+  "publisher": "omacar",
+  "analytics": {
+    "enabled": true,
+    "event_schema_version": "0.1",
+    "collector_url": "https://chinaflow-event-collector-v0-1.an13501112545.workers.dev/v1/events"
+  },
+  "rules": [
+    {
+      "id": "omacar-shanghai-business-hotels",
+      "enabled": true,
+      "match": {
+        "type": "path",
+        "value": "/post/best-business-hotels-in-shanghai-for-international-travelers"
+      },
+      "product": "hotel",
+      "placement": "omacar_shanghai_business_hotels_test",
+      "eyebrow": "PLAN YOUR CHINA TRIP",
+      "title": "Find Hotels in Shanghai",
+      "subtitle": "Compare Shanghai hotel options and book your stay on Trip.com",
+      "icon": "▣",
+      "url": "https://www.trip.com/hotels?Allianceid=10021103&SID=328317298&trip_sub1=omacar_shanghai_business_hotels_test&trip_sub3=D19217690"
+    }
+  ],
+  "offers": []
+}
