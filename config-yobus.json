@@ -1,0 +1,27 @@
+{
+  "version": "0.1",
+  "publisher": "yobus",
+  "analytics": {
+    "enabled": true,
+    "event_schema_version": "0.1",
+    "collector_url": "https://chinaflow-event-collector-v0-1.an13501112545.workers.dev/v1/events"
+  },
+  "rules": [
+    {
+      "id": "yobus-home-hotels-v1",
+      "enabled": true,
+      "match": {
+        "type": "path",
+        "value": "/"
+      },
+      "product": "hotel",
+      "placement": "yobus_home_hotels_v1",
+      "eyebrow": "PLAN YOUR CHINA TRIP",
+      "title": "Find Hotels for Your China Trip",
+      "subtitle": "Compare hotel options and book your stay on Trip.com",
+      "icon": "▣",
+      "url": "https://www.trip.com/hotels?Allianceid=10021103&SID=328317298&trip_sub1=yobus_home_hotels_v1&trip_sub3=D19217690"
+    }
+  ],
+  "offers": []
+}
