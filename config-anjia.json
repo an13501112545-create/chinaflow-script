@@ -1,0 +1,27 @@
+{
+  "version": "0.1",
+  "publisher": "anjia",
+  "analytics": {
+    "enabled": true,
+    "event_schema_version": "0.1",
+    "collector_url": "https://chinaflow-event-collector-v0-1.an13501112545.workers.dev/v1/events"
+  },
+  "rules": [
+    {
+      "id": "anjia-chongqing-hotels-guide",
+      "enabled": true,
+      "match": {
+        "type": "path",
+        "value": "/best-areas-to-stay-in-chongqing"
+      },
+      "product": "hotel",
+      "placement": "anjia_best_areas_chongqing_hotels_v1",
+      "eyebrow": "TRAVELING INDEPENDENTLY?",
+      "title": "Compare Hotels in Chongqing",
+      "subtitle": "Browse Chongqing hotel options and book your stay on Trip.com",
+      "icon": "▣",
+      "url": "https://www.trip.com/hotels/chongqing-hotels-list-4/?Allianceid=10021103&SID=328317298&trip_sub1=anjia_best_areas_chongqing_hotels_v1&trip_sub3=D19217690"
+    }
+  ],
+  "offers": []
+}
