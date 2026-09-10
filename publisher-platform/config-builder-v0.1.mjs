@@ -44,7 +44,11 @@ function normalizeHostname(value) {
   return hostname;
 }
 
-function validateAffiliateUrl(value, name) {
+function validateAffiliateUrl(
+  value,
+  name,
+  expectedPlacement
+) {
   const raw = requireString(value, name);
 
   let url;
@@ -64,6 +68,18 @@ function validateAffiliateUrl(value, name) {
     url.hostname !== "trip.com"
   ) {
     throw new Error(`${name} must use trip.com`);
+  }
+
+  const tripSub1Values =
+    url.searchParams.getAll("trip_sub1");
+
+  if (
+    tripSub1Values.length !== 1 ||
+    tripSub1Values[0] !== expectedPlacement
+  ) {
+    throw new Error(
+      `${name} trip_sub1 must match placement`
+    );
   }
 
   /*
@@ -112,7 +128,8 @@ function buildOffer(rawOffer, index) {
   const url =
     validateAffiliateUrl(
       rawOffer.url,
-      `supplier offers[${index}].url`
+      `supplier offers[${index}].url`,
+      placement
     );
 
   if (product === "hotel") {
