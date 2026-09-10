@@ -74,6 +74,14 @@ export async function handleAuthRequest(request, env) {
     return response(400, { error: "invalid_email" }, allowedOrigin);
   }
 
+  if (env?.AUTH_ENVIRONMENT !== "production") {
+    const testEmail = normalizeEmail(env?.AUTH_TEST_EMAIL);
+
+    if (!testEmail || email !== testEmail) {
+      return response(202, { ok: true }, allowedOrigin);
+    }
+  }
+
   const db = env?.CHINAFLOW_EVENTS;
 
   if (!db || typeof db.prepare !== "function") {
