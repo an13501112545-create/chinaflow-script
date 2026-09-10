@@ -1,5 +1,6 @@
 import { findOrCreateLoginUser } from "./auth-user-store-v0.1.mjs";
 import { createMagicLink } from "./auth-magic-link-store-v0.1.mjs";
+import { sendMagicLinkEmail } from "./auth-email-resend-v0.1.mjs";
 
 const ROUTE = "/v1/auth/magic-link";
 const APP_ORIGIN = "https://app.getchinaflow.com";
@@ -82,7 +83,17 @@ export async function handleAuthRequest(request, env) {
   const user = await findOrCreateLoginUser(db, email);
 
   if (user.active) {
-    await createMagicLink(db, user.userId);
+    const magicLink = await createMagicLink(db, user.userId);
+
+    try {
+      await sendMagicLinkEmail({
+        apiKey: env.RESEND_API_KEY,
+        to: email,
+        token: magicLink.token
+      });
+    } catch (error) {
+      console.error("[ChinaFlow Auth API v0.1] Magic-link email delivery failed", error);
+    }
   }
 
   /* Active, disabled, existing and newly-created users all receive the same response. */
