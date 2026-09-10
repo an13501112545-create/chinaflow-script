@@ -1,8 +1,10 @@
 import { findOrCreateLoginUser } from "./auth-user-store-v0.1.mjs";
 import { createMagicLink } from "./auth-magic-link-store-v0.1.mjs";
 import { sendMagicLinkEmail } from "./auth-email-resend-v0.1.mjs";
+import { completeMagicLinkLogin } from "./auth-login-service-v0.1.mjs";
 
-const ROUTE = "/v1/auth/magic-link";
+const MAGIC_LINK_ROUTE = "/v1/auth/magic-link";
+const CONSUME_ROUTE = "/v1/auth/consume";
 const APP_ORIGIN = "https://app.getchinaflow.com";
 
 function response(status, body = null, origin = null) {
@@ -46,7 +48,7 @@ function normalizeEmail(value) {
 export async function handleAuthRequest(request, env) {
   const url = new URL(request.url);
 
-  if (url.pathname !== ROUTE) return response(404);
+  if (url.pathname !== MAGIC_LINK_ROUTE && url.pathname !== CONSUME_ROUTE) return response(404);
 
   const origin = request.headers.get("Origin");
   const allowedOrigin = origin === APP_ORIGIN ? origin : null;
@@ -66,6 +68,20 @@ export async function handleAuthRequest(request, env) {
     body = await request.json();
   } catch {
     return response(400, { error: "invalid_json" }, allowedOrigin);
+  }
+
+  if (url.pathname === CONSUME_ROUTE) {
+    const db = env?.CHINAFLOW_EVENTS;
+
+    if (!db || typeof db.prepare !== "function" || typeof db.batch !== "function") {
+      throw new Error("D1 binding unavailable");
+    }
+
+    const login = await completeMagicLinkLogin(db, body?.token);
+
+    return login
+      ? response(200, { ok: true }, allowedOrigin)
+      : response(401, { error: "invalid_or_expired_link" }, allowedOrigin);
   }
 
   const email = normalizeEmail(body?.email);
