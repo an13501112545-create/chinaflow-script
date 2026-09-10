@@ -1,2 +1,5 @@
 # Cloudflare Wrangler local state
 .wrangler/
+
+# Node project-local dependencies
+node_modules/
