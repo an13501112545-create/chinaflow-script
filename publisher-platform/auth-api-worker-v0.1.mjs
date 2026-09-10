@@ -1,3 +1,6 @@
+import { findOrCreateLoginUser } from "./auth-user-store-v0.1.mjs";
+import { createMagicLink } from "./auth-magic-link-store-v0.1.mjs";
+
 const ROUTE = "/v1/auth/magic-link";
 const APP_ORIGIN = "https://app.getchinaflow.com";
 
@@ -76,14 +79,13 @@ export async function handleAuthRequest(request, env) {
     throw new Error("D1 binding unavailable");
   }
 
-  /*
-   * Deliberately do not reveal whether this email exists.
-   * Existing and unknown accounts receive the same response.
-   */
-  await db.prepare(
-    "SELECT user_id FROM publisher_users WHERE email_normalized = ? AND user_status = 'active' LIMIT 1"
-  ).bind(email).first();
+  const user = await findOrCreateLoginUser(db, email);
 
+  if (user.active) {
+    await createMagicLink(db, user.userId);
+  }
+
+  /* Active, disabled, existing and newly-created users all receive the same response. */
   return response(202, { ok: true }, allowedOrigin);
 }
 
