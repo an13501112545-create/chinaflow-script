@@ -5,6 +5,7 @@ import { validateSession } from "./auth-session-validate-v0.1.mjs";
 const APP_ORIGIN = "https://app.getchinaflow.com";
 const CONSUME_ROUTE = "/api/auth/consume";
 const SESSION_ROUTE = "/api/auth/session";
+const LOGIN_ROUTE = "/login";
 
 function json(status, body, extraHeaders = {}) {
   const headers = new Headers({
@@ -22,8 +23,113 @@ function json(status, body, extraHeaders = {}) {
   return new Response(JSON.stringify(body), { status, headers });
 }
 
+function html(status, body) {
+  return new Response(body, {
+    status,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "no-referrer",
+      "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    }
+  });
+}
+
 export async function handleAppRequest(request, env) {
   const url = new URL(request.url);
+
+  if (url.pathname === LOGIN_ROUTE) {
+    if (request.method !== "GET") {
+      return json(405, { error: "method_not_allowed" });
+    }
+
+    return html(200, `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign in to ChinaFlow</title>
+<style>
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:520px;margin:80px auto;padding:24px;color:#15202b}
+h1{font-size:28px;margin-bottom:12px}
+p{line-height:1.5;color:#52606d}
+button{margin-top:18px;padding:12px 18px;border:0;border-radius:8px;background:#0b7285;color:white;font-size:16px;cursor:pointer}
+button:disabled{opacity:.55;cursor:default}
+#status{margin-top:18px}
+</style>
+</head>
+<body>
+<h1>Sign in to ChinaFlow</h1>
+<p id="message">Checking your sign-in link…</p>
+<button id="continue" hidden>Continue sign in</button>
+<p id="status"></p>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const token = params.get("token");
+  const button = document.getElementById("continue");
+  const message = document.getElementById("message");
+  const status = document.getElementById("status");
+
+  if (token) {
+    history.replaceState({}, "", "/login");
+    message.textContent = "Your secure sign-in link is ready.";
+    button.hidden = false;
+
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      status.textContent = "Signing you in…";
+
+      try {
+        const response = await fetch("/api/auth/consume", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({token})
+        });
+
+        if (!response.ok) {
+          status.textContent = "This sign-in link is invalid or has expired.";
+          return;
+        }
+
+        const session = await fetch("/api/auth/session");
+
+        if (!session.ok) {
+          status.textContent = "Sign-in succeeded, but the session could not be verified.";
+          return;
+        }
+
+        status.textContent = "You are signed in to ChinaFlow.";
+        button.hidden = true;
+        message.textContent = "Authentication complete.";
+      } catch {
+        status.textContent = "Unable to sign in. Please try again.";
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    return;
+  }
+
+  fetch("/api/auth/session")
+    .then(async response => {
+      if (response.ok) {
+        message.textContent = "You are already signed in to ChinaFlow.";
+      } else {
+        message.textContent = "No active sign-in link was found.";
+      }
+    })
+    .catch(() => {
+      message.textContent = "Unable to check your session.";
+    });
+})();
+</script>
+</body>
+</html>`);
+  }
 
   if (url.pathname === CONSUME_ROUTE) {
     if (request.method !== "POST") {
