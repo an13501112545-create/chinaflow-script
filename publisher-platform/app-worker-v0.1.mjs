@@ -1,8 +1,10 @@
 import { completeMagicLinkLogin } from "./auth-login-service-v0.1.mjs";
-import { serializeSessionCookie } from "./auth-session-cookie-v0.1.mjs";
+import { serializeSessionCookie, readSessionCookie, clearSessionCookie } from "./auth-session-cookie-v0.1.mjs";
+import { validateSession } from "./auth-session-validate-v0.1.mjs";
 
 const APP_ORIGIN = "https://app.getchinaflow.com";
 const CONSUME_ROUTE = "/api/auth/consume";
+const SESSION_ROUTE = "/api/auth/session";
 
 function json(status, body, extraHeaders = {}) {
   const headers = new Headers({
@@ -57,6 +59,39 @@ export async function handleAppRequest(request, env) {
       { ok: true },
       { "Set-Cookie": serializeSessionCookie(login.token) }
     );
+  }
+
+  if (url.pathname === SESSION_ROUTE) {
+    if (request.method !== "GET") {
+      return json(405, { error: "method_not_allowed" });
+    }
+
+    const token = readSessionCookie(request.headers.get("Cookie"));
+
+    if (!token) {
+      return json(401, { authenticated: false });
+    }
+
+    const db = env?.CHINAFLOW_EVENTS;
+
+    if (!db || typeof db.prepare !== "function") {
+      throw new Error("D1 binding unavailable");
+    }
+
+    const session = await validateSession(db, token);
+
+    if (!session) {
+      return json(
+        401,
+        { authenticated: false },
+        { "Set-Cookie": clearSessionCookie() }
+      );
+    }
+
+    return json(200, {
+      authenticated: true,
+      userId: session.userId
+    });
   }
 
   if (url.pathname === "/health") {
