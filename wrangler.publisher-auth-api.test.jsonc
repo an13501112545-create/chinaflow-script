@@ -14,5 +14,23 @@
   "vars": {
     "AUTH_ENVIRONMENT": "test",
     "AUTH_TEST_EMAIL": "an13501112545@gmail.com"
-  }
+  },
+  "ratelimits": [
+    {
+      "name": "MAGIC_LINK_EMAIL_RATE_LIMITER",
+      "namespace_id": "26091201",
+      "simple": {
+        "limit": 3,
+        "period": 60
+      }
+    },
+    {
+      "name": "MAGIC_LINK_IP_RATE_LIMITER",
+      "namespace_id": "26091202",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
+    }
+  ]
 }
