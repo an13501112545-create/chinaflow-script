@@ -45,6 +45,26 @@ function normalizeEmail(value) {
   return email;
 }
 
+async function rateLimitKey(scope, value) {
+  const input = new TextEncoder().encode(`${scope}:${value}`);
+  const digest = await crypto.subtle.digest("SHA-256", input);
+
+  return Array.from(
+    new Uint8Array(digest),
+    byte => byte.toString(16).padStart(2, "0")
+  ).join("");
+}
+
+async function checkRateLimit(limiter, key) {
+  if (!limiter || typeof limiter.limit !== "function") {
+    throw new Error("Rate limit binding unavailable");
+  }
+
+  const result = await limiter.limit({ key });
+
+  return result?.success === true;
+}
+
 export async function handleAuthRequest(request, env) {
   const url = new URL(request.url);
 
@@ -96,6 +116,26 @@ export async function handleAuthRequest(request, env) {
     if (!testEmail || email !== testEmail) {
       return response(202, { ok: true }, allowedOrigin);
     }
+  }
+
+  const clientIp = request.headers.get("CF-Connecting-IP")?.trim() || "unknown";
+
+  const ipAllowed = await checkRateLimit(
+    env?.MAGIC_LINK_IP_RATE_LIMITER,
+    await rateLimitKey("ip", clientIp)
+  );
+
+  if (!ipAllowed) {
+    return response(202, { ok: true }, allowedOrigin);
+  }
+
+  const emailAllowed = await checkRateLimit(
+    env?.MAGIC_LINK_EMAIL_RATE_LIMITER,
+    await rateLimitKey("email", email)
+  );
+
+  if (!emailAllowed) {
+    return response(202, { ok: true }, allowedOrigin);
   }
 
   const db = env?.CHINAFLOW_EVENTS;
