@@ -1,3 +1,4 @@
+import { readDraftInput, getOnboardingDraft, createOnboardingDraft } from "./onboarding-draft-v0.1.mjs";
 import { completeMagicLinkLogin } from "./auth-login-service-v0.1.mjs";
 import { serializeSessionCookie, readSessionCookie, clearSessionCookie } from "./auth-session-cookie-v0.1.mjs";
 import { validateSession } from "./auth-session-validate-v0.1.mjs";
@@ -41,6 +42,26 @@ function html(status, body) {
 
 export async function handleAppRequest(request, env) {
   const url = new URL(request.url);
+
+  if (url.pathname === "/api/onboarding/draft") {
+    if (request.method !== "GET" && request.method !== "POST") {
+      return json(405, { error: "method_not_allowed" });
+    }
+    if (request.method === "POST" && request.headers.get("Origin") !== APP_ORIGIN) {
+      return json(403, { error: "forbidden" });
+    }
+    const token = readSessionCookie(request.headers.get("Cookie"));
+    const db = env?.CHINAFLOW_EVENTS;
+    if (!token) return json(401, { error: "unauthenticated" });
+    if (request.method === "GET") {
+      const result = await getOnboardingDraft(db, token);
+      return json(result.status, result.body);
+    }
+    const input = await readDraftInput(request);
+    if (!input) return json(400, { error: "invalid_input" });
+    const result = await createOnboardingDraft(db, token, input);
+    return json(result.status, result.body);
+  }
 
   if (url.pathname === LOGIN_ROUTE) {
     if (request.method !== "GET") {
