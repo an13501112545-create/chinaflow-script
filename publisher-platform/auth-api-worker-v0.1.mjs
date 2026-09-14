@@ -149,14 +149,16 @@ export async function handleAuthRequest(request, env) {
   if (user.active) {
     const magicLink = await createMagicLink(db, user.userId);
 
-    try {
-      await sendMagicLinkEmail({
-        apiKey: env.RESEND_API_KEY,
-        to: email,
-        token: magicLink.token
-      });
-    } catch (error) {
-      console.error("[ChinaFlow Auth API v0.1] Magic-link email delivery failed", error);
+    if (magicLink) {
+      try {
+        await sendMagicLinkEmail({
+          apiKey: env.RESEND_API_KEY,
+          to: email,
+          token: magicLink.token
+        });
+      } catch (error) {
+        console.error("[ChinaFlow Auth API v0.1] Magic-link email delivery failed", error);
+      }
     }
   }
 
