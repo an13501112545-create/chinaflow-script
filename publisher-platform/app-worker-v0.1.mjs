@@ -1,3 +1,4 @@
+import { readTermsInput, acceptOnboardingTerms } from "./onboarding-terms-v0.1.mjs";
 import { readDraftInput, getOnboardingDraft, createOnboardingDraft } from "./onboarding-draft-v0.1.mjs";
 import { completeMagicLinkLogin } from "./auth-login-service-v0.1.mjs";
 import { serializeSessionCookie, readSessionCookie, clearSessionCookie } from "./auth-session-cookie-v0.1.mjs";
@@ -42,6 +43,17 @@ function html(status, body) {
 
 export async function handleAppRequest(request, env) {
   const url = new URL(request.url);
+
+  if (url.pathname === "/api/onboarding/terms") {
+    if (request.method !== "POST") return json(405, { error: "method_not_allowed" });
+    if (request.headers.get("Origin") !== APP_ORIGIN) return json(403, { error: "forbidden" });
+    const inputError = await readTermsInput(request);
+    if (inputError) return json(inputError.status, inputError.body);
+    const token = readSessionCookie(request.headers.get("Cookie"));
+    if (!token) return json(401, { error: "unauthenticated" });
+    const result = await acceptOnboardingTerms(env?.CHINAFLOW_EVENTS, token);
+    return json(result.status, result.body);
+  }
 
   if (url.pathname === "/api/onboarding/draft") {
     if (request.method !== "GET" && request.method !== "POST") {
