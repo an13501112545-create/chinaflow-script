@@ -1,4 +1,6 @@
+import { isValidInstallPublicKey } from "./install-public-key-v0.1.mjs";
 import {
+  buildInstallConfigFromD1,
   buildPublisherConfigFromD1
 } from "./config-reader-d1-v0.1.mjs";
 
@@ -136,6 +138,22 @@ function parseRequestOrigin(request) {
   };
 }
 
+// Strict serialized HTTPS origin; URL parsing supplies ASCII/IDNA normalization.
+export function parseInstallRequestOrigin(request) {
+  const raw = request.headers.get("Origin");
+  if (typeof raw !== "string" || raw.length > 2048 ||
+      /[\s\x00-\x1f\x7f\\%]/u.test(raw) ||
+      !/^https:\/\/[^/:@?#]+(?::443)?$/i.test(raw)) return null;
+  let url;
+  try { url = new URL(raw); } catch { return null; }
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+  const labels = hostname.split(".");
+  if (url.protocol !== "https:" || url.port || hostname.length > 253 ||
+      labels.length < 2 || /^[0-9.]+$/.test(hostname) ||
+      labels.some(label => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) return null;
+  return { origin: raw, hostname, boundOrigin: `https://${hostname}` };
+}
+
 export async function handleConfigRequest(
   request,
   env
@@ -149,6 +167,24 @@ export async function handleConfigRequest(
 
   if (request.method !== "GET") {
     return emptyResponse(405);
+  }
+
+  const hasPublisher = url.searchParams.has("publisher_id");
+  const hasInstall = url.searchParams.has("install_key");
+  if (hasPublisher === hasInstall) {
+    return jsonResponse(400, { error: "invalid_request" });
+  }
+  if (hasInstall) {
+    const keys = url.searchParams.getAll("install_key");
+    if (keys.length !== 1 || !isValidInstallPublicKey(keys[0])) {
+      return jsonResponse(400, { error: "invalid_request" });
+    }
+    const origin = parseInstallRequestOrigin(request);
+    if (!origin) return emptyResponse(403);
+    const config = await buildInstallConfigFromD1(
+      env?.CHINAFLOW_EVENTS, keys[0], origin.hostname, origin.boundOrigin
+    );
+    return config === null ? emptyResponse(403) : jsonResponse(200, config, origin.origin);
   }
 
   const publisherId =

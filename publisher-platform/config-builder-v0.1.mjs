@@ -247,3 +247,38 @@ export function buildPublisherConfig(input) {
 
   return config;
 }
+
+// Self-service config deliberately has no analytics identity or collector.
+export function buildInstallConfig(input, boundOrigin) {
+  const config = {
+    version: "0.2",
+    runtime_enabled: false,
+    analytics: { enabled: false, event_schema_version: "0.1", collector_url: null },
+    rules: [],
+    offers: []
+  };
+  const { publisher = {}, domain = {}, supplierSite = {} } = input || {};
+  if (!monetizationReady({ publisher, domain, supplierSite }) ||
+      publisher.terms_version !== "chinaflow-publisher-terms-v1" ||
+      publisher.terms_accepted_at == null || publisher.has_terms_actor !== true ||
+      supplierSite.publisher_id !== publisher.publisher_id ||
+      supplierSite.domain_id !== domain.domain_id) return config;
+
+  for (const raw of Array.isArray(supplierSite.offers) ? supplierSite.offers : []) {
+    try {
+      // Reject URL parser repair and credential-bearing destinations on this path.
+      if (typeof raw?.url !== "string" || /[\s\x00-\x1f\x7f\\]/u.test(raw.url) ||
+          !/^https:\/\//i.test(raw.url)) continue;
+      const destination = new URL(raw.url);
+      if (destination.username || destination.password || destination.port) continue;
+      config.offers.push(buildOffer(raw, config.offers.length));
+    } catch {
+      // An unusable offer must not suppress other valid monetization offers.
+    }
+  }
+  if (config.offers.length) {
+    config.runtime_enabled = true;
+    config.bound_origin = boundOrigin;
+  }
+  return config;
+}

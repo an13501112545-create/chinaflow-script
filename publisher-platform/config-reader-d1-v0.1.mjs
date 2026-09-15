@@ -1,5 +1,7 @@
+import { isValidInstallPublicKey } from "./install-public-key-v0.1.mjs";
 import {
-  buildPublisherConfig
+  buildPublisherConfig,
+  buildInstallConfig
 } from "./config-builder-v0.1.mjs";
 
 function requireString(value, name) {
@@ -39,10 +41,11 @@ function normalizeHostname(value) {
     .replace(/\.$/, "");
 }
 
-export async function loadPublisherConfigInput(
+async function loadConfigInput(
   database,
   publisherId,
-  hostname
+  hostname,
+  installLookup = false
 ) {
   assertDatabase(database);
 
@@ -58,6 +61,7 @@ export async function loadPublisherConfigInput(
 SELECT
   p.publisher_id,
   p.account_status,
+  ${installLookup ? "p.terms_version, p.terms_accepted_at, p.terms_accepted_by_user_id IS NOT NULL AS has_terms_actor," : ""}
 
   d.domain_id,
   d.hostname,
@@ -99,7 +103,7 @@ LEFT JOIN publisher_placements pp
  AND pp.supplier = s.supplier
  AND pp.is_active = 1
 
-WHERE p.publisher_id = ?1
+WHERE p.${installLookup ? "install_public_key" : "publisher_id"} = ?1
   AND d.hostname = ?2
 
 ORDER BY o.supplier_offer_id
@@ -126,7 +130,12 @@ ORDER BY o.supplier_offer_id
 
   const publisher = {
     publisher_id: first.publisher_id,
-    account_status: first.account_status
+    account_status: first.account_status,
+    ...(installLookup ? {
+      terms_version: first.terms_version,
+      terms_accepted_at: first.terms_accepted_at,
+      has_terms_actor: first.has_terms_actor === 1
+    } : {})
   };
 
   const domain = {
@@ -237,4 +246,19 @@ export async function buildPublisherConfigFromD1(
   }
 
   return buildPublisherConfig(input);
+}
+
+// Separate entry points keep legacy readers independent of migration 0007.
+export async function loadPublisherConfigInput(database, publisherId, hostname) {
+  return loadConfigInput(database, publisherId, hostname);
+}
+
+export async function loadInstallConfigInput(database, installKey, hostname) {
+  if (!isValidInstallPublicKey(installKey)) throw new Error("Invalid install key");
+  return loadConfigInput(database, installKey, hostname, true);
+}
+
+export async function buildInstallConfigFromD1(database, installKey, hostname, boundOrigin) {
+  const input = await loadInstallConfigInput(database, installKey, hostname);
+  return input === null ? null : buildInstallConfig(input, boundOrigin);
 }
