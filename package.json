@@ -2,6 +2,7 @@
   "name": "chinaflow-script",
   "private": true,
   "devDependencies": {
+    "jsdom": "30.0.1",
     "wrangler": "4.130.0"
   }
 }
