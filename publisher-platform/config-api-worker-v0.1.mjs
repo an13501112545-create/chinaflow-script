@@ -1,3 +1,4 @@
+import { handleRuntimeAssetRequest } from "./runtime-assets-v0.1.mjs";
 import { isValidInstallPublicKey } from "./install-public-key-v0.1.mjs";
 import {
   buildInstallConfigFromD1,
@@ -247,6 +248,8 @@ export async function handleConfigRequest(
 export default {
   async fetch(request, env) {
     try {
+      const runtime = await handleRuntimeAssetRequest(request);
+      if (runtime) return runtime;
       return await handleConfigRequest(
         request,
         env
