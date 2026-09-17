@@ -13,8 +13,8 @@ async function fixture(t) {
   t.after(() => sqlite.close());
   sqlite.exec("PRAGMA foreign_keys = ON");
   const migrations = new URL("../../collector/migrations/", import.meta.url);
-  const files = readdirSync(migrations).filter(name => /^000[1-5]_.*\.sql$/.test(name)).sort();
-  assert.equal(files.length, 5);
+  const files = readdirSync(migrations).filter(name => /^000[1-7]_.*\.sql$/.test(name)).sort();
+  assert.equal(files.length, 7);
   for (const file of files) sqlite.exec(readFileSync(new URL(file, migrations), "utf8"));
   assert.equal(sqlite.prepare("PRAGMA foreign_keys").get().foreign_keys, 1);
   sqlite.exec(`INSERT INTO publisher_users (user_id,email,email_normalized) VALUES
@@ -83,6 +83,8 @@ test("create, authorized GET/retry, exact defaults, no supplier or placement wri
   assert.equal(p.country_code, null);
   assert.equal(p.terms_version, null);
   assert.equal(p.terms_accepted_at, null);
+  assert.equal(p.terms_accepted_by_user_id, null);
+  assert.match(p.install_public_key, /^cfi_[0-9a-f]{32}$/);
   assert.equal(m.publisher_id, p.publisher_id);
   assert.equal(m.user_id, "user1");
   assert.equal(m.role, "owner");
@@ -95,7 +97,8 @@ test("create, authorized GET/retry, exact defaults, no supplier or placement wri
   assert.equal(d.monetization_status, "disabled");
   for (const key of ["first_seen_at", "last_seen_at", "verified_at", "reviewed_at"]) assert.equal(d[key], null);
   assert.deepEqual(created.body, { draft: { publisher: {
-    publisher_id: p.publisher_id, slug: p.slug, display_name: input.display_name, account_status: "draft"
+    publisher_id: p.publisher_id, slug: p.slug, display_name: input.display_name,
+    account_status: "draft", install_public_key: p.install_public_key
   }, primary_domain: { hostname: input.hostname } } });
   assert.deepEqual((await f.request({ method: "GET" })).body, created.body);
   const retry = await f.request({ body: input });
@@ -183,7 +186,8 @@ for (const body of ["{", "null", "[]", "{}", "x".repeat(4097),
   { ...input, display_name: "" }, { ...input, display_name: "a".repeat(201) },
   { ...input, display_name: "<script>" }, { ...input, display_name: 123 }, { ...input, hostname: "a".repeat(1025) },
   ...["user_id", "publisher_id", "slug", "account_status", "role", "membership_status", "terms_version",
-    "terms_accepted_at", "supplier_credentials", "affiliate_url", "external_tracking_key", "country_code",
+    "terms_accepted_at", "install_public_key", "supplier_credentials", "affiliate_url",
+    "external_tracking_key", "country_code",
     "domain_id", "is_primary", "__proto__"].map(key => ({ ...input, [key]: "forged" }))
 ]) {
   test(`invalid or forbidden input: ${JSON.stringify(body).slice(0, 100)}`, async t => {
@@ -229,6 +233,82 @@ for (const status of ["invited", "removed"]) {
     assert.equal((await f.request({ method: "GET" })).status, 404);
     assert.equal((await f.request()).status, 409);
     assert.deepEqual(f.counts(), [1, 1, 1]);
+  });
+}
+
+for (const exhausted of [false, true]) {
+  test(`generated install_public_key collision: ${exhausted ? "bounded exhaustion" : "specific retry succeeds"}`, async t => {
+    const f = await fixture(t);
+    const collisionKey = `cfi_${"11".repeat(16)}`;
+
+    f.sqlite.prepare(`
+      INSERT INTO publishers (
+        publisher_id, slug, display_name, install_public_key
+      ) VALUES (
+        'existing-install-key',
+        'existing-install-key',
+        'Existing',
+        ?
+      )
+    `).run(collisionKey);
+
+    const original = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
+    let randomCalls = 0;
+
+    t.mock.method(globalThis.crypto, "getRandomValues", bytes => {
+      randomCalls++;
+
+      if (exhausted || randomCalls === 1) {
+        bytes.fill(0x11);
+        return bytes;
+      }
+
+      return original(bytes);
+    });
+
+    const result = await f.request();
+
+    assert.equal(result.status, exhausted ? 503 : 201);
+    assert.equal(f.state.batches, exhausted ? 3 : 2);
+    assert.equal(randomCalls, exhausted ? 3 : 2);
+    assert.deepEqual(
+      f.counts(),
+      exhausted ? [1, 0, 0] : [2, 1, 1]
+    );
+
+    if (exhausted) {
+      assert.deepEqual(
+        result.body,
+        { error: "temporarily_unavailable" }
+      );
+    } else {
+      const issued =
+        result.body.draft.publisher.install_public_key;
+
+      assert.match(
+        issued,
+        /^cfi_[0-9a-f]{32}$/
+      );
+
+      assert.notEqual(
+        issued,
+        collisionKey
+      );
+
+      assert.equal(
+        f.sqlite.prepare(`
+          SELECT count(*) AS n
+          FROM publishers
+          WHERE install_public_key = ?
+        `).get(issued).n,
+        1
+      );
+    }
+
+    assert.deepEqual(
+      f.sqlite.prepare("PRAGMA foreign_key_check").all(),
+      []
+    );
   });
 }
 
@@ -340,7 +420,12 @@ test("existing non-draft membership blocks creation", async t => {
 for (const suffix of ["", ": SQLITE_CONSTRAINT", ": SQLITE_CONSTRAINT_UNIQUE",
   ": SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE)",
   ": SQLITE_CONSTRAINT_PRIMARYKEY", ": SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_PRIMARYKEY)"]) {
-  for (const field of ["publishers.publisher_id", "publishers.slug", "publisher_domains.hostname"]) {
+  for (const field of [
+    "publishers.publisher_id",
+    "publishers.slug",
+    "publishers.install_public_key",
+    "publisher_domains.hostname"
+  ]) {
     for (const wrapped of [false, true]) {
       test(`constraint matcher ${field}${suffix} (${wrapped ? "cause" : "message"})`, async t => {
         const f = await fixture(t);
@@ -365,7 +450,11 @@ for (const suffix of ["", ": SQLITE_CONSTRAINT", ": SQLITE_CONSTRAINT_UNIQUE",
   }
 }
 
-for (const field of ["publishers.publisher_id", "publishers.slug"]) {
+for (const field of [
+  "publishers.publisher_id",
+  "publishers.slug",
+  "publishers.install_public_key"
+]) {
   test(`workerd ${field} collision exhaustion remains bounded`, async t => {
     const f = await fixture(t);
     let attempts = 0;

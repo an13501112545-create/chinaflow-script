@@ -1,4 +1,5 @@
 import { validateSession } from "./auth-session-validate-v0.1.mjs";
+import { generateInstallPublicKey } from "./install-public-key-v0.1.mjs";
 
 export function normalizeOnboardingHostname(value) {
   if (typeof value !== "string" || !value || value.length > 1024 ||
@@ -52,7 +53,7 @@ const ELIGIBLE_SESSION = `SELECT 1 FROM publisher_sessions s
 
 async function readAuthorizedDraft(database, session) {
   const row = await database.prepare(`
-    SELECT p.publisher_id, p.slug, p.display_name, p.account_status, d.hostname
+    SELECT p.publisher_id, p.slug, p.display_name, p.account_status, p.install_public_key, d.hostname
     FROM publisher_memberships m
     JOIN publishers p ON p.publisher_id = m.publisher_id
     JOIN publisher_domains d ON d.publisher_id = p.publisher_id AND d.is_primary = 1
@@ -63,7 +64,8 @@ async function readAuthorizedDraft(database, session) {
   if (!row) return null;
   return {
     publisher: { publisher_id: row.publisher_id, slug: row.slug,
-      display_name: row.display_name, account_status: row.account_status },
+      display_name: row.display_name, account_status: row.account_status,
+      install_public_key: row.install_public_key },
     primary_domain: { hostname: row.hostname }
   };
 }
@@ -73,7 +75,7 @@ function uniqueField(error) {
   // other constraints and unexpected errors must never trigger a retry.
   const messages = [error?.message, error?.cause?.message].filter(value => typeof value === "string");
   for (const message of messages) {
-    const match = message.match(/(?:^|: )UNIQUE constraint failed: (publishers\.(?:publisher_id|slug)|publisher_domains\.hostname)(?=$|: SQLITE_CONSTRAINT(?:_(UNIQUE|PRIMARYKEY)| \(extended: SQLITE_CONSTRAINT_(UNIQUE|PRIMARYKEY)\))?$)/);
+    const match = message.match(/(?:^|: )UNIQUE constraint failed: (publishers\.(?:publisher_id|slug|install_public_key)|publisher_domains\.hostname)(?=$|: SQLITE_CONSTRAINT(?:_(UNIQUE|PRIMARYKEY)| \(extended: SQLITE_CONSTRAINT_(UNIQUE|PRIMARYKEY)\))?$)/);
     if (match && ((match[2] || match[3]) !== "PRIMARYKEY" ||
         match[1] === "publishers.publisher_id")) return match[1];
   }
@@ -98,13 +100,19 @@ export async function createOnboardingDraft(database, token, input) {
     const slug = `pub-${crypto.randomUUID()}`;
     const membershipId = `mem_${crypto.randomUUID()}`;
     const domainId = `dom_${crypto.randomUUID()}`;
+    const installPublicKey = generateInstallPublicKey();
     let results;
     try {
       results = await database.batch([
-        database.prepare(`INSERT INTO publishers (publisher_id, slug, display_name)
-          SELECT ?, ?, ? WHERE EXISTS (${ELIGIBLE_SESSION})
+        database.prepare(`INSERT INTO publishers (
+          publisher_id, slug, display_name, install_public_key
+        )
+          SELECT ?, ?, ?, ? WHERE EXISTS (${ELIGIBLE_SESSION})
           AND NOT EXISTS (SELECT 1 FROM publisher_memberships WHERE user_id = ?)
-        `).bind(publisherId, slug, valid.display_name, session.sessionId, session.userId, session.userId),
+        `).bind(
+          publisherId, slug, valid.display_name, installPublicKey,
+          session.sessionId, session.userId, session.userId
+        ),
         // changes() is the immediately preceding statement's row count in this
         // sequential atomic batch. EXISTS alone is unsafe on generated ID collision
         // when the first INSERT selects zero rows.
@@ -119,7 +127,9 @@ export async function createOnboardingDraft(database, token, input) {
       ]);
     } catch (error) {
       const field = uniqueField(error);
-      if (field === "publishers.publisher_id" || field === "publishers.slug") {
+      if (field === "publishers.publisher_id" ||
+          field === "publishers.slug" ||
+          field === "publishers.install_public_key") {
         if (attempt < 2) continue;
         return { status: 503, body: { error: "temporarily_unavailable" } };
       }
@@ -134,6 +144,10 @@ export async function createOnboardingDraft(database, token, input) {
         draft.primary_domain.hostname !== valid.hostname) {
       return { status: 409, body: { error: "conflict" } };
     }
-    return { status: Number(results[0]?.meta?.changes) === 1 ? 201 : 200, body: { draft } };
+    const created = Number(results[0]?.meta?.changes) === 1;
+    if (created && draft.publisher.install_public_key !== installPublicKey) {
+      throw new Error("install key persistence mismatch");
+    }
+    return { status: created ? 201 : 200, body: { draft } };
   }
 }
