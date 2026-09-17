@@ -49,6 +49,85 @@ const SESSION = `SELECT 1 FROM publisher_sessions s JOIN publisher_users u ON u.
 const OWNERS = `SELECT publisher_id FROM publisher_memberships
   WHERE user_id = ? AND membership_status = 'active' AND role = 'owner'`;
 
+export async function getOnboardingTerms(database, token) {
+  const session = await validateSession(database, token);
+  if (!session) return failure(401, "unauthenticated");
+
+  const owners = (await database.prepare(OWNERS).bind(session.userId).all()).results;
+  if (owners.length > 1) return failure(409, "conflict");
+  if (owners.length !== 1) return failure(403, "forbidden");
+
+  const publisherId = owners[0].publisher_id;
+
+  const current = await database.prepare(`SELECT
+    EXISTS (${SESSION}) AS session_valid,
+    (SELECT count(*) FROM (${OWNERS})) AS owner_count,
+    EXISTS (SELECT 1 FROM (${OWNERS}) WHERE publisher_id = ?) AS authorized,
+    p.account_status,
+    p.terms_version,
+    p.terms_accepted_at,
+    p.terms_accepted_by_user_id,
+    EXISTS (
+      SELECT 1 FROM publisher_domains d
+      WHERE d.publisher_id = p.publisher_id
+        AND d.is_primary = 1
+    ) AS primary_domain
+    FROM (SELECT 1)
+    LEFT JOIN publishers p ON p.publisher_id = ?
+  `).bind(
+    session.sessionId,
+    session.userId,
+    session.userId,
+    session.userId,
+    publisherId,
+    publisherId
+  ).first();
+
+  if (!current.session_valid) return failure(401, "unauthenticated");
+  if (current.owner_count > 1) return failure(409, "conflict");
+  if (!current.authorized) return failure(403, "forbidden");
+  if (current.account_status !== "draft") return failure(409, "conflict");
+  if (!current.primary_domain) return failure(409, "conflict");
+
+  const untouched =
+    current.terms_version === null &&
+    current.terms_accepted_at === null &&
+    current.terms_accepted_by_user_id === null;
+
+  if (untouched) {
+    return {
+      status: 200,
+      body: {
+        terms: {
+          terms_version: TERMS_VERSION,
+          accepted: false,
+          terms_accepted_at: null
+        }
+      }
+    };
+  }
+
+  const accepted =
+    current.terms_version === TERMS_VERSION &&
+    current.terms_accepted_at !== null &&
+    current.terms_accepted_by_user_id !== null;
+
+  if (accepted) {
+    return {
+      status: 200,
+      body: {
+        terms: {
+          terms_version: TERMS_VERSION,
+          accepted: true,
+          terms_accepted_at: current.terms_accepted_at
+        }
+      }
+    };
+  }
+
+  return failure(409, "conflict");
+}
+
 export async function acceptOnboardingTerms(database, token) {
   const session = await validateSession(database, token);
   if (!session) return failure(401, "unauthenticated");

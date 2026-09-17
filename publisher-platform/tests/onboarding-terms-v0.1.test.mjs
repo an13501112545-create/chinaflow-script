@@ -64,6 +64,148 @@ test('migration is nullable, additive, no backfill and restrictive actor FK', as
   assert.deepEqual(f.sql.prepare('PRAGMA foreign_key_check').all(), []);
 });
 
+test('GET reports current terms state without mutation and tracks acceptance', async t => {
+  const f = await fixture(t);
+  const before = f.publisher();
+
+  const initial = await f.request({
+    method: 'GET',
+    origin: null,
+    type: null
+  });
+
+  assert.deepEqual(initial, {
+    status: 200,
+    body: {
+      terms: {
+        terms_version: TERMS_VERSION,
+        accepted: false,
+        terms_accepted_at: null
+      }
+    }
+  });
+
+  assert.deepEqual(f.publisher(), before);
+  assert.equal(
+    f.sql.prepare('SELECT count(*) n FROM acceptance_mutations').get().n,
+    0
+  );
+
+  const accepted = await f.request();
+  assert.equal(accepted.status, 200);
+
+  const current = await f.request({
+    method: 'GET',
+    origin: null,
+    type: null
+  });
+
+  assert.equal(current.status, 200);
+  assert.equal(current.body.terms.terms_version, TERMS_VERSION);
+  assert.equal(current.body.terms.accepted, true);
+  assert.equal(
+    current.body.terms.terms_accepted_at,
+    accepted.body.terms.terms_accepted_at
+  );
+  assert.equal(current.body.terms.terms_accepted_by_user_id, undefined);
+
+  assert.equal(
+    f.sql.prepare('SELECT count(*) n FROM acceptance_mutations').get().n,
+    1
+  );
+});
+
+for (const [label, mutate, expected] of [
+  ['removed membership', f => f.sql.exec(
+    "UPDATE publisher_memberships SET membership_status='removed' WHERE user_id='u1'"
+  ), 403],
+  ['non-owner membership', f => f.sql.exec(
+    "UPDATE publisher_memberships SET role='member' WHERE user_id='u1'"
+  ), 403],
+  ['ambiguous ownership', f => f.sql.exec(
+    "INSERT INTO publisher_memberships(membership_id,publisher_id,user_id) VALUES ('amb-get','p2','u1')"
+  ), 409],
+  ['non-draft publisher', f => f.sql.exec(
+    "UPDATE publishers SET account_status='active' WHERE publisher_id='p1'"
+  ), 409],
+  ['missing primary domain', f => f.sql.exec(
+    "DELETE FROM publisher_domains WHERE publisher_id='p1'"
+  ), 409]
+]) {
+  test(`GET terms state fails closed: ${label}`, async t => {
+    const f = await fixture(t);
+
+    mutate(f);
+
+    const before = f.publisher();
+    const mutationsBefore =
+      f.sql.prepare(
+        'SELECT count(*) n FROM acceptance_mutations'
+      ).get().n;
+
+    const result = await f.request({
+      method: 'GET',
+      origin: null,
+      type: null
+    });
+
+    assert.deepEqual(result, {
+      status: expected,
+      body: {
+        error:
+          expected === 403
+            ? 'forbidden'
+            : 'conflict'
+      }
+    });
+
+    assert.deepEqual(f.publisher(), before);
+
+    assert.equal(
+      f.sql.prepare(
+        'SELECT count(*) n FROM acceptance_mutations'
+      ).get().n,
+      mutationsBefore
+    );
+  });
+}
+
+for (const token of [null, 'bad', 'a'.repeat(64)]) {
+  test(`GET terms state rejects invalid session ${String(token).slice(0,12)}`, async t => {
+    const f = await fixture(t);
+
+    assert.deepEqual(
+      await f.request({
+        method: 'GET',
+        token,
+        origin: null,
+        type: null
+      }),
+      {
+        status: 401,
+        body: { error: 'unauthenticated' }
+      }
+    );
+  });
+}
+
+test('GET terms state rejects query selectors', async t => {
+  const f = await fixture(t);
+
+  assert.deepEqual(
+    await f.request({
+      method: 'GET',
+      origin: null,
+      type: null,
+      path: '/api/onboarding/terms?publisher_id=p2'
+    }),
+    {
+      status: 400,
+      body: { error: 'invalid_input' }
+    }
+  );
+});
+
 for (const different of [false, true]) test(`concurrent acceptance and immutable retries: different owners=${different}`, async t => {
   const f = await fixture(t); const before = f.publisher(); const protectedBefore = f.snapshot();
   const results = await Promise.all(Array.from({ length: 8 }, (_, i) => f.request({ token: f.sessions[different ? i % 2 : 0].token })));
@@ -121,7 +263,10 @@ for (const access of ['owner', 'unauthorized', 'cross-tenant']) for (const bound
 for (let mask=1; mask<8; mask++) test(`stored partial/unsupported acceptance mask ${mask}`, async t => {
   const f = await fixture(t);
   f.sql.prepare("UPDATE publishers SET terms_version=?,terms_accepted_at=?,terms_accepted_by_user_id=? WHERE publisher_id='p1'").run(mask&1 ? (mask===7 ? 'old' : TERMS_VERSION) : null, mask&2 ? '2020-01-01' : null, mask&4 ? 'u1' : null);
-  const before = f.publisher(); assert.equal((await f.request()).status,409); assert.deepEqual(f.publisher(),before);
+  const before = f.publisher();
+  assert.equal((await f.request({method:'GET',origin:null,type:null})).status,409);
+  assert.equal((await f.request()).status,409);
+  assert.deepEqual(f.publisher(),before);
 });
 test('non-draft retry conflicts', async t => { const f=await fixture(t); await f.request(); f.sql.exec("UPDATE publishers SET account_status='pending_review'"); const before=f.publisher(); assert.equal((await f.request()).status,409); assert.deepEqual(f.publisher(),before); });
 
@@ -129,7 +274,7 @@ const badRequests = [
   ...[null,'null','https://foreign.test','http://app.getchinaflow.com','https://app.getchinaflow.com/','https://app.getchinaflow.com:443','https://app.getchinaflow.com:8443','https://app.getchinaflow.com.evil.test','not an origin'].map(origin=>[{origin},403]),
   ...[null,'bad','a'.repeat(64)].map(token=>[{token},401]),
   ...['text/plain','application/jsonp','application/json; charset=latin1',null].map(type=>[{type},415]),
-  [{method:'GET'},405], [{path:'/api/onboarding/terms?publisher_id=p2'},400],
+  [{method:'PUT'},405], [{path:'/api/onboarding/terms?publisher_id=p2'},400],
   ...['{','null','[]','{}','true', '{"accepted":true}', '{"terms_version":1,"accepted":true}', '{"terms_version":"chinaflow-publisher-terms-v1","accepted":"true"}'].map(body=>[{body},400]),
   ...['older','chinaflow-publisher-terms-v0','chinaflow-publisher-terms-v2',''].map(terms_version=>[{body:{...valid,terms_version}},409]),
   ...[false,1,null].map(accepted=>[{body:{...valid,accepted}},400]),
