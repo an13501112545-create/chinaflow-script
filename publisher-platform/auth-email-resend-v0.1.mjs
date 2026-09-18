@@ -1,8 +1,6 @@
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 const FROM = "ChinaFlow <login@auth.getchinaflow.com>";
-const APP_LOGIN_URL = "https://app.getchinaflow.com/login";
-
-export async function sendMagicLinkEmail({ fetchFn = fetch, apiKey, to, token }) {
+export async function sendMagicLinkEmail({ fetchFn = fetch, apiKey, to, token, appOrigin }) {
   if (typeof fetchFn !== "function") throw new Error("Fetch unavailable");
   if (typeof apiKey !== "string" || !apiKey) throw new Error("Resend API key unavailable");
   if (typeof to !== "string" || !to) throw new Error("Invalid recipient");
@@ -10,7 +8,28 @@ export async function sendMagicLinkEmail({ fetchFn = fetch, apiKey, to, token })
     throw new Error("Invalid magic-link token");
   }
 
-  const loginUrl = new URL(APP_LOGIN_URL);
+  let appUrl;
+
+  try {
+    appUrl = new URL(appOrigin);
+  } catch {
+    throw new Error("Invalid app origin");
+  }
+
+  if (
+    typeof appOrigin !== "string" ||
+    appUrl.protocol !== "https:" ||
+    appUrl.username !== "" ||
+    appUrl.password !== "" ||
+    appUrl.pathname !== "/" ||
+    appUrl.search !== "" ||
+    appUrl.hash !== "" ||
+    appUrl.origin !== appOrigin
+  ) {
+    throw new Error("Invalid app origin");
+  }
+
+  const loginUrl = new URL("/login", appOrigin);
   loginUrl.searchParams.set("token", token);
 
   const result = await fetchFn(RESEND_ENDPOINT, {

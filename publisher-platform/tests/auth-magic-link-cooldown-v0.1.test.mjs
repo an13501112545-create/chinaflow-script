@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { createMagicLink } from "../auth-magic-link-store-v0.1.mjs";
 import { hashToken } from "../auth-token-v0.1.mjs";
-import { handleAuthRequest } from "../auth-api-worker-v0.1.mjs";
+import worker, { handleAuthRequest } from "../auth-api-worker-v0.1.mjs";
 import { completeMagicLinkLogin } from "../auth-login-service-v0.1.mjs";
 import { validateSession } from "../auth-session-validate-v0.1.mjs";
 
@@ -106,7 +106,8 @@ test("Worker keeps coarse shields and returns 202 without Resend on cooldown", a
     return Response.json({ id: "mock-email" });
   };
   const env = {
-    CHINAFLOW_EVENTS: db, AUTH_ENVIRONMENT: "test",
+    CHINAFLOW_EVENTS: db, APP_ORIGIN: "https://app.getchinaflow.com",
+    AUTH_ENVIRONMENT: "test",
     AUTH_TEST_EMAIL: "test@example.com", RESEND_API_KEY: "mock-key",
     MAGIC_LINK_IP_RATE_LIMITER: { async limit() { ipChecks++; return { success: ipAllowed }; } },
     MAGIC_LINK_EMAIL_RATE_LIMITER: { async limit() { emailChecks++; return { success: emailAllowed }; } }
@@ -132,6 +133,95 @@ test("Worker keeps coarse shields and returns 202 without Resend on cooldown", a
   await request();
   assert.equal(emails, 1);
 });
+
+
+test("configured APP_ORIGIN controls CORS and magic-link destination", async t => {
+  const { db } = fixture(t);
+  const appOrigin = "https://publisher.example.test";
+  let outbound = null;
+
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  globalThis.fetch = async (url, init) => {
+    outbound = {
+      url: String(url),
+      body: JSON.parse(init.body)
+    };
+    return Response.json({ id: "mock-email" });
+  };
+
+  const env = {
+    CHINAFLOW_EVENTS: db,
+    APP_ORIGIN: appOrigin,
+    AUTH_ENVIRONMENT: "test",
+    AUTH_TEST_EMAIL: "test@example.com",
+    RESEND_API_KEY: "mock-key",
+    MAGIC_LINK_IP_RATE_LIMITER: { async limit() { return { success: true }; } },
+    MAGIC_LINK_EMAIL_RATE_LIMITER: { async limit() { return { success: true }; } }
+  };
+
+  const result = await worker.fetch(new Request("https://auth.example/v1/auth/magic-link", {
+    method: "POST",
+    headers: {
+      Origin: appOrigin,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ email: "test@example.com" })
+  }), env);
+
+  assert.equal(result.status, 202);
+  assert.equal(result.headers.get("Access-Control-Allow-Origin"), appOrigin);
+  assert.deepEqual(await result.json(), { ok: true });
+
+  assert.ok(outbound);
+  assert.equal(outbound.url, "https://api.resend.com/emails");
+  assert.match(
+    outbound.body.text,
+    /^Sign in to ChinaFlow: https:\/\/publisher\.example\.test\/login\?token=[0-9a-f]{64}\n\n/
+  );
+  assert.match(
+    outbound.body.html,
+    /href="https:\/\/publisher\.example\.test\/login\?token=[0-9a-f]{64}"/
+  );
+  assert.ok(!outbound.body.text.includes("https://app.getchinaflow.com/login"));
+});
+
+for (const appOrigin of [
+  null,
+  "",
+  "not an origin",
+  "http://publisher.example.test",
+  "https://publisher.example.test/",
+  "https://publisher.example.test:443"
+]) {
+  test(`Auth API fails closed for configured APP_ORIGIN ${appOrigin}`, async t => {
+    const { db } = fixture(t);
+
+    const env = {
+      CHINAFLOW_EVENTS: db,
+      AUTH_ENVIRONMENT: "test",
+      AUTH_TEST_EMAIL: "test@example.com",
+      RESEND_API_KEY: "mock-key",
+      MAGIC_LINK_IP_RATE_LIMITER: { async limit() { return { success: true }; } },
+      MAGIC_LINK_EMAIL_RATE_LIMITER: { async limit() { return { success: true }; } }
+    };
+
+    if (appOrigin !== null) env.APP_ORIGIN = appOrigin;
+
+    const result = await worker.fetch(new Request("https://auth.example/v1/auth/magic-link", {
+      method: "POST",
+      headers: {
+        Origin: "https://publisher.example.test",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ email: "test@example.com" })
+    }), env);
+
+    assert.equal(result.status, 500);
+    assert.deepEqual(await result.json(), { error: "internal_error" });
+  });
+}
 
 test("new links retain single-use login and session security", async t => {
   const { sqlite, db } = fixture(t);

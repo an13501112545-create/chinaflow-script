@@ -5,7 +5,35 @@ import { completeMagicLinkLogin } from "./auth-login-service-v0.1.mjs";
 
 const MAGIC_LINK_ROUTE = "/v1/auth/magic-link";
 const CONSUME_ROUTE = "/v1/auth/consume";
-const APP_ORIGIN = "https://app.getchinaflow.com";
+function requireAppOrigin(env) {
+  const value = env?.APP_ORIGIN;
+
+  if (typeof value !== "string" || value.length === 0 || value.length > 2048) {
+    throw new Error("APP_ORIGIN binding unavailable or invalid");
+  }
+
+  let parsed;
+
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("APP_ORIGIN binding unavailable or invalid");
+  }
+
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.pathname !== "/" ||
+    parsed.search !== "" ||
+    parsed.hash !== "" ||
+    parsed.origin !== value
+  ) {
+    throw new Error("APP_ORIGIN binding unavailable or invalid");
+  }
+
+  return value;
+}
 
 function response(status, body = null, origin = null) {
   const headers = new Headers({
@@ -70,8 +98,9 @@ export async function handleAuthRequest(request, env) {
 
   if (url.pathname !== MAGIC_LINK_ROUTE && url.pathname !== CONSUME_ROUTE) return response(404);
 
+  const appOrigin = requireAppOrigin(env);
   const origin = request.headers.get("Origin");
-  const allowedOrigin = origin === APP_ORIGIN ? origin : null;
+  const allowedOrigin = origin === appOrigin ? origin : null;
 
   if (request.method === "OPTIONS") {
     return allowedOrigin
@@ -154,7 +183,8 @@ export async function handleAuthRequest(request, env) {
         await sendMagicLinkEmail({
           apiKey: env.RESEND_API_KEY,
           to: email,
-          token: magicLink.token
+          token: magicLink.token,
+          appOrigin
         });
       } catch (error) {
         console.error("[ChinaFlow Auth API v0.1] Magic-link email delivery failed", error);
