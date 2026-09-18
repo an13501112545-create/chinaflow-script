@@ -29,11 +29,6 @@ source_note: >
 
 ## English Terms
 
->
-> The following clauses are reconstructed from the previously approved commercial
-> and legal structure. They remain subject to completion and final review before
-> this document may be used for electronic acceptance.
-
 ### 1. Definitions
 
 For purposes of these Terms:
