@@ -7,6 +7,7 @@ import { createSession } from '../auth-session-store-v0.1.mjs';
 import { TERMS_VERSION } from '../onboarding-terms-v0.1.mjs';
 
 const valid = { terms_version: TERMS_VERSION, accepted: true };
+const TEST_APP_ORIGIN = "https://app.getchinaflow.com";
 async function fixture(t) {
   const sql = new DatabaseSync(':memory:');
   t.after(() => sql.close());
@@ -34,15 +35,17 @@ async function fixture(t) {
   const publisher = () => ({ ...sql.prepare("SELECT * FROM publishers WHERE publisher_id='p1'").get() });
   const snapshot = () => Object.fromEntries(sql.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('publishers','acceptance_mutations') ORDER BY name").all()
     .map(({ name }) => [name, sql.prepare(`SELECT * FROM ${name}`).all()]));
-  async function request({ body = valid, token = sessions[0].token, origin = 'https://app.getchinaflow.com',
+  async function request({ body = valid, token = sessions[0].token, origin = TEST_APP_ORIGIN, appOrigin = TEST_APP_ORIGIN,
     type = 'application/json; charset=UTF-8', path = '/api/onboarding/terms', method = 'POST' } = {}) {
     const headers = {};
     if (origin !== null) headers.Origin = origin;
     if (token !== null) headers.Cookie = `__Host-chinaflow_session=${token}`;
     if (type !== null) headers['Content-Type'] = type;
-    const response = await worker.fetch(new Request(`https://app.getchinaflow.com${path}`, { method, headers,
+    const requestEnv = { CHINAFLOW_EVENTS: db };
+    if (appOrigin !== null) requestEnv.APP_ORIGIN = appOrigin;
+    const response = await worker.fetch(new Request(`${TEST_APP_ORIGIN}${path}`, { method, headers,
       ...(method === 'GET' ? {} : { body: typeof body === 'string' || body instanceof Uint8Array || body instanceof ReadableStream ? body : JSON.stringify(body), duplex: 'half' })
-    }), { CHINAFLOW_EVENTS: db });
+    }), requestEnv);
     assert.equal(response.headers.get('Cache-Control'), 'no-store');
     assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
     return { status: response.status, body: await response.json() };
@@ -270,6 +273,25 @@ for (let mask=1; mask<8; mask++) test(`stored partial/unsupported acceptance mas
 });
 test('non-draft retry conflicts', async t => { const f=await fixture(t); await f.request(); f.sql.exec("UPDATE publishers SET account_status='pending_review'"); const before=f.publisher(); assert.equal((await f.request()).status,409); assert.deepEqual(f.publisher(),before); });
 
+for (const appOrigin of [
+  null,
+  '',
+  'not an origin',
+  'http://app.getchinaflow.com',
+  'https://app.getchinaflow.com/',
+  'https://app.getchinaflow.com:443'
+]) {
+  test(`POST fails closed for configured APP_ORIGIN ${appOrigin}`, async t => {
+    const f = await fixture(t);
+    assert.deepEqual(
+      await f.request({ appOrigin }),
+      { status: 500, body: { error: 'internal_error' } }
+    );
+    assert.equal(f.publisher().terms_version, null);
+    assert.equal(f.sql.prepare('SELECT count(*) n FROM acceptance_mutations').get().n, 0);
+  });
+}
+
 const badRequests = [
   ...[null,'null','https://foreign.test','http://app.getchinaflow.com','https://app.getchinaflow.com/','https://app.getchinaflow.com:443','https://app.getchinaflow.com:8443','https://app.getchinaflow.com.evil.test','not an origin'].map(origin=>[{origin},403]),
   ...[null,'bad','a'.repeat(64)].map(token=>[{token},401]),
@@ -308,7 +330,8 @@ test('real local workerd/D1: concurrent owners, retry, denial, immutable attribu
   const adapt = convertV4MiniflareOptions ?? (options => options);
   const mf = new Miniflare(adapt({ d1Persist: false, workers: [{ name: "terms-local", modules: true,
     script: bundle.outputFiles[0].text,
-    compatibilityDate: '2026-09-01', d1Databases: { CHINAFLOW_EVENTS: 'terms-isolated-local' },
+    compatibilityDate: '2026-09-01', bindings: { APP_ORIGIN: TEST_APP_ORIGIN },
+    d1Databases: { CHINAFLOW_EVENTS: 'terms-isolated-local' },
     }] }));
   t.after(() => mf.dispose());
   const db = await mf.getD1Database('CHINAFLOW_EVENTS');

@@ -5,7 +5,35 @@ import { serializeSessionCookie, readSessionCookie, clearSessionCookie } from ".
 import { validateSession } from "./auth-session-validate-v0.1.mjs";
 import { revokeSessionByToken } from "./auth-session-store-v0.1.mjs";
 
-const APP_ORIGIN = "https://app.getchinaflow.com";
+function requireAppOrigin(env) {
+  const value = env?.APP_ORIGIN;
+
+  if (typeof value !== "string" || value.length === 0 || value.length > 2048) {
+    throw new Error("APP_ORIGIN binding unavailable or invalid");
+  }
+
+  let parsed;
+
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("APP_ORIGIN binding unavailable or invalid");
+  }
+
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.pathname !== "/" ||
+    parsed.search !== "" ||
+    parsed.hash !== "" ||
+    parsed.origin !== value
+  ) {
+    throw new Error("APP_ORIGIN binding unavailable or invalid");
+  }
+
+  return value;
+}
 const CONSUME_ROUTE = "/api/auth/consume";
 const SESSION_ROUTE = "/api/auth/session";
 const LOGIN_ROUTE = "/login";
@@ -58,7 +86,7 @@ export async function handleAppRequest(request, env) {
       return json(result.status, result.body);
     }
 
-    if (request.headers.get("Origin") !== APP_ORIGIN) {
+    if (request.headers.get("Origin") !== requireAppOrigin(env)) {
       return json(403, { error: "forbidden" });
     }
 
@@ -73,7 +101,7 @@ export async function handleAppRequest(request, env) {
     if (request.method !== "GET" && request.method !== "POST") {
       return json(405, { error: "method_not_allowed" });
     }
-    if (request.method === "POST" && request.headers.get("Origin") !== APP_ORIGIN) {
+    if (request.method === "POST" && request.headers.get("Origin") !== requireAppOrigin(env)) {
       return json(403, { error: "forbidden" });
     }
     const token = readSessionCookie(request.headers.get("Cookie"));
@@ -185,7 +213,7 @@ button:disabled{opacity:.55;cursor:default}
       return json(405, { error: "method_not_allowed" });
     }
 
-    if (request.headers.get("Origin") !== APP_ORIGIN) {
+    if (request.headers.get("Origin") !== requireAppOrigin(env)) {
       return json(403, { error: "forbidden" });
     }
 
@@ -221,7 +249,7 @@ button:disabled{opacity:.55;cursor:default}
       return json(405, { error: "method_not_allowed" });
     }
 
-    if (request.headers.get("Origin") !== APP_ORIGIN) {
+    if (request.headers.get("Origin") !== requireAppOrigin(env)) {
       return json(403, { error: "forbidden" });
     }
 

@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { handleAppRequest } from "../app-worker-v0.1.mjs";
+import worker, { handleAppRequest } from "../app-worker-v0.1.mjs";
 import { createOnboardingDraft, normalizeOnboardingHostname } from "../onboarding-draft-v0.1.mjs";
 import { createSession } from "../auth-session-store-v0.1.mjs";
 import { createMagicLink } from "../auth-magic-link-store-v0.1.mjs";
 import { buildPublisherConfigFromD1 } from "../config-reader-d1-v0.1.mjs";
+
+const TEST_APP_ORIGIN = "https://app.getchinaflow.com";
 
 async function fixture(t) {
   const sqlite = new DatabaseSync(":memory:");
@@ -51,14 +53,16 @@ async function fixture(t) {
   const sessions = [await createSession(db, "user1"), await createSession(db, "user2")];
   const counts = () => ["publishers", "publisher_memberships", "publisher_domains"].map(table =>
     sqlite.prepare(`SELECT count(*) AS n FROM ${table}`).get().n);
-  async function request({ method = "POST", token = sessions[0].token, origin = "https://app.getchinaflow.com",
+  async function request({ method = "POST", token = sessions[0].token, origin = TEST_APP_ORIGIN, appOrigin = TEST_APP_ORIGIN,
     body = { display_name: "Example Company", hostname: "Travel.Example.COM." }, path = "/api/onboarding/draft" } = {}) {
     const headers = { "Content-Type": "application/json" };
     if (token !== null) headers.Cookie = `__Host-chinaflow_session=${token}`;
     if (origin !== null) headers.Origin = origin;
-    const response = await handleAppRequest(new Request(`https://app.getchinaflow.com${path}`, {
+    const requestEnv = { CHINAFLOW_EVENTS: db };
+    if (appOrigin !== null) requestEnv.APP_ORIGIN = appOrigin;
+    const response = await handleAppRequest(new Request(`${TEST_APP_ORIGIN}${path}`, {
       method, headers, ...(method === "GET" ? {} : { body: typeof body === "string" ? body : JSON.stringify(body) })
-    }), { CHINAFLOW_EVENTS: db });
+    }), requestEnv);
     assert.equal(response.headers.get("Cache-Control"), "no-store");
     return { status: response.status, body: await response.json(), headers: response.headers };
   }
@@ -203,6 +207,22 @@ for (const origin of [null, "null", "https://evil.example", "http://app.getchina
   test(`POST rejects origin ${origin}`, async t => {
     const f = await fixture(t);
     assert.equal((await f.request({ origin })).status, 403);
+    assert.deepEqual(f.counts(), [0, 0, 0]);
+  });
+}
+
+for (const appOrigin of [null, "", "not an origin", "http://app.getchinaflow.com", "https://app.getchinaflow.com/"]) {
+  test(`POST fails closed for configured APP_ORIGIN ${appOrigin}`, async t => {
+    const f = await fixture(t);
+    const env = { CHINAFLOW_EVENTS: f.db };
+    if (appOrigin !== null) env.APP_ORIGIN = appOrigin;
+    const response = await worker.fetch(new Request(`${TEST_APP_ORIGIN}/api/onboarding/draft`, {
+      method: "POST",
+      headers: { Origin: TEST_APP_ORIGIN, "Content-Type": "application/json", Cookie: `__Host-chinaflow_session=${f.sessions[0].token}` },
+      body: JSON.stringify(input)
+    }), env);
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), { error: "internal_error" });
     assert.deepEqual(f.counts(), [0, 0, 0]);
   });
 }
@@ -362,7 +382,7 @@ test("app login/consume/session/logout regressions and host-only cookie", async 
   assert.match(logout.headers.get("Set-Cookie"), /Max-Age=0/);
   assert.equal((await f.request({ method: "GET", path: "/api/auth/session", token })).status, 401);
   assert.equal((await f.request({ token })).status, 401);
-  const page = await handleAppRequest(new Request("https://app.getchinaflow.com/login"), { CHINAFLOW_EVENTS: f.db });
+  const page = await handleAppRequest(new Request(`${TEST_APP_ORIGIN}/login`), { CHINAFLOW_EVENTS: f.db, APP_ORIGIN: TEST_APP_ORIGIN });
   assert.equal(page.status, 200);
   assert.match(await page.text(), /Continue sign in/);
 });

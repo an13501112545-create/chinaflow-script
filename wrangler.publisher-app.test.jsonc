@@ -12,6 +12,7 @@
     }
   ],
   "vars": {
-    "APP_ENVIRONMENT": "test"
+    "APP_ENVIRONMENT": "test",
+    "APP_ORIGIN": "https://chinaflow-publisher-app-v0-1-test.an13501112545.workers.dev"
   }
 }
