@@ -384,7 +384,9 @@ test("app login/consume/session/logout regressions and host-only cookie", async 
   assert.equal((await f.request({ token })).status, 401);
   const page = await handleAppRequest(new Request(`${TEST_APP_ORIGIN}/login`), { CHINAFLOW_EVENTS: f.db, APP_ORIGIN: TEST_APP_ORIGIN });
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /Continue sign in/);
+  const pageHtml = await page.text();
+  assert.match(pageHtml, /Continue sign in/);
+  assert.match(pageHtml, /location\.assign\(["']\/onboarding["']\)/);
 });
 
 test("concurrent differing same-user input creates only the winning draft", async t => {

@@ -35,11 +35,42 @@ function requireAppOrigin(env) {
 
   return value;
 }
+
+function requireRuntimeOrigin(env) {
+  const value = env?.CHINAFLOW_RUNTIME_ORIGIN;
+
+  if (typeof value !== "string" || value.length === 0 || value.length > 2048) {
+    throw new Error("CHINAFLOW_RUNTIME_ORIGIN binding unavailable or invalid");
+  }
+
+  let parsed;
+
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("CHINAFLOW_RUNTIME_ORIGIN binding unavailable or invalid");
+  }
+
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.pathname !== "/" ||
+    parsed.search !== "" ||
+    parsed.hash !== "" ||
+    parsed.origin !== value
+  ) {
+    throw new Error("CHINAFLOW_RUNTIME_ORIGIN binding unavailable or invalid");
+  }
+
+  return value;
+}
 const CONSUME_ROUTE = "/api/auth/consume";
 const SESSION_ROUTE = "/api/auth/session";
 const LOGIN_ROUTE = "/login";
 const LOGOUT_ROUTE = "/api/auth/logout";
 const PUBLISHER_TERMS_ROUTE = "/legal/chinaflow-publisher-terms-v1";
+const ONBOARDING_ROUTE = "/onboarding";
 
 function json(status, body, extraHeaders = {}) {
   const headers = new Headers({
@@ -130,6 +161,286 @@ ${content}
 </html>`;
 
     return legalHtml(200, request.method === "HEAD" ? null : document);
+  }
+
+  if (url.pathname === ONBOARDING_ROUTE) {
+    if (request.method !== "GET") {
+      return json(405, { error: "method_not_allowed" }, { "Allow": "GET" });
+    }
+
+    const runtimeOrigin = requireRuntimeOrigin(env);
+
+    return html(200, `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChinaFlow Publisher Onboarding</title>
+<style>
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f6f9fb;color:#15202b;margin:0}
+main{max-width:720px;margin:48px auto;padding:0 20px 64px}
+.card{background:#fff;border:1px solid #d9e2ec;border-radius:12px;padding:24px;margin:18px 0}
+h1{font-size:30px;margin:0 0 8px}
+h2{font-size:20px;margin:0 0 14px}
+p{line-height:1.55;color:#52606d}
+label{display:block;font-weight:600;margin:14px 0 6px}
+input{box-sizing:border-box;width:100%;padding:11px 12px;border:1px solid #bcccdc;border-radius:8px;font-size:16px}
+button{padding:11px 16px;border:0;border-radius:8px;background:#0b7285;color:#fff;font-size:15px;cursor:pointer}
+button:disabled{opacity:.55;cursor:default}
+pre{white-space:pre-wrap;word-break:break-all;background:#102a43;color:#f0f4f8;padding:16px;border-radius:8px;line-height:1.5}
+.hidden{display:none}
+.status{margin-top:12px}
+a{color:#0b7285}
+</style>
+</head>
+<body>
+<main>
+<h1>Set up ChinaFlow</h1>
+<p>Connect your approved website to ChinaFlow.</p>
+
+<section id="loading" class="card">
+  <p>Checking your account…</p>
+</section>
+
+<section id="create" class="card hidden">
+  <h2>Create your publisher profile</h2>
+  <form id="draft-form">
+    <label for="display_name">Publisher name</label>
+    <input id="display_name" name="display_name" maxlength="200" required>
+
+    <label for="hostname">Primary website hostname</label>
+    <input id="hostname" name="hostname" placeholder="example.com" required>
+
+    <button id="create-button" type="submit">Create publisher</button>
+    <p id="create-status" class="status"></p>
+  </form>
+</section>
+
+<section id="terms" class="card hidden">
+  <h2>Publisher Program Terms</h2>
+  <p>
+    Review the
+    <a href="/legal/chinaflow-publisher-terms-v1" target="_blank" rel="noopener">
+      ChinaFlow Publisher Program Terms
+    </a>.
+  </p>
+  <button id="accept-button" type="button">I accept the terms</button>
+  <p id="terms-status" class="status"></p>
+</section>
+
+<section id="install" class="card hidden">
+  <h2>Installation code</h2>
+  <p>Add this script to your approved website.</p>
+  <pre id="snippet"></pre>
+  <button id="copy-button" type="button">Copy installation code</button>
+  <p id="copy-status" class="status"></p>
+</section>
+
+<p id="fatal" class="status"></p>
+
+<script>
+(() => {
+  const TERMS_VERSION = "chinaflow-publisher-terms-v1";
+  const RUNTIME_ORIGIN = ${JSON.stringify(runtimeOrigin)};
+
+  const loading = document.getElementById("loading");
+  const create = document.getElementById("create");
+  const terms = document.getElementById("terms");
+  const install = document.getElementById("install");
+  const fatal = document.getElementById("fatal");
+
+  const draftForm = document.getElementById("draft-form");
+  const createButton = document.getElementById("create-button");
+  const createStatus = document.getElementById("create-status");
+
+  const acceptButton = document.getElementById("accept-button");
+  const termsStatus = document.getElementById("terms-status");
+
+  const snippet = document.getElementById("snippet");
+  const copyButton = document.getElementById("copy-button");
+  const copyStatus = document.getElementById("copy-status");
+
+  let currentDraft = null;
+
+  function show(element) {
+    element.classList.remove("hidden");
+  }
+
+  function hide(element) {
+    element.classList.add("hidden");
+  }
+
+  function installCode(key) {
+    return '<script async src="' +
+      RUNTIME_ORIGIN +
+      '/runtime/loader.js" data-chinaflow-install="' +
+      key +
+      '"><' + '/script>';
+  }
+
+  async function readJson(response) {
+    try {
+      return await response.json();
+    } catch {
+      return {};
+    }
+  }
+
+  async function loadTerms() {
+    const response = await fetch("/api/onboarding/terms");
+
+    if (!response.ok) {
+      throw new Error("Unable to load publisher terms.");
+    }
+
+    const body = await readJson(response);
+    const state = body.terms;
+
+    if (!state || state.terms_version !== TERMS_VERSION) {
+      throw new Error("Unexpected publisher terms version.");
+    }
+
+    if (state.accepted === true) {
+      hide(terms);
+
+      const key = currentDraft?.publisher?.install_public_key;
+      if (!key) {
+        throw new Error("Installation key is unavailable.");
+      }
+
+      snippet.textContent = installCode(key);
+      show(install);
+      return;
+    }
+
+    hide(install);
+    show(terms);
+  }
+
+  async function loadDraft() {
+    const response = await fetch("/api/onboarding/draft");
+
+    if (response.status === 404) {
+      currentDraft = null;
+      hide(terms);
+      hide(install);
+      show(create);
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error("Unable to load publisher profile.");
+    }
+
+    const body = await readJson(response);
+    currentDraft = body.draft;
+
+    if (!currentDraft?.publisher?.install_public_key) {
+      throw new Error("Publisher profile is incomplete.");
+    }
+
+    hide(create);
+    await loadTerms();
+  }
+
+  async function boot() {
+    try {
+      const session = await fetch("/api/auth/session");
+
+      if (!session.ok) {
+        location.assign("/login");
+        return;
+      }
+
+      hide(loading);
+      await loadDraft();
+    } catch {
+      hide(loading);
+      fatal.textContent = "Unable to load onboarding. Please try again.";
+    }
+  }
+
+  draftForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    createButton.disabled = true;
+    createStatus.textContent = "Creating publisher…";
+
+    try {
+      const response = await fetch("/api/onboarding/draft", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          display_name: draftForm.elements.display_name.value,
+          hostname: draftForm.elements.hostname.value
+        })
+      });
+
+      const body = await readJson(response);
+
+      if (!response.ok || !body.draft) {
+        createStatus.textContent =
+          response.status === 409
+            ? "That website is already registered or conflicts with an existing publisher."
+            : "Unable to create publisher. Check the information and try again.";
+        return;
+      }
+
+      currentDraft = body.draft;
+      createStatus.textContent = "";
+      hide(create);
+      await loadTerms();
+    } catch {
+      createStatus.textContent = "Unable to create publisher. Please try again.";
+    } finally {
+      createButton.disabled = false;
+    }
+  });
+
+  acceptButton.addEventListener("click", async () => {
+    acceptButton.disabled = true;
+    termsStatus.textContent = "Saving acceptance…";
+
+    try {
+      const response = await fetch("/api/onboarding/terms", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          terms_version: TERMS_VERSION,
+          accepted: true
+        })
+      });
+
+      const body = await readJson(response);
+
+      if (!response.ok || body?.terms?.terms_version !== TERMS_VERSION) {
+        termsStatus.textContent = "Unable to accept the terms. Please try again.";
+        return;
+      }
+
+      termsStatus.textContent = "";
+      await loadTerms();
+    } catch {
+      termsStatus.textContent = "Unable to accept the terms. Please try again.";
+    } finally {
+      acceptButton.disabled = false;
+    }
+  });
+
+  copyButton.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(snippet.textContent);
+      copyStatus.textContent = "Installation code copied.";
+    } catch {
+      copyStatus.textContent = "Copy failed. Select the code above and copy it manually.";
+    }
+  });
+
+  boot();
+})();
+</script>
+</main>
+</body>
+</html>`);
   }
 
   if (url.pathname === "/api/onboarding/terms") {
@@ -238,9 +549,8 @@ button:disabled{opacity:.55;cursor:default}
           return;
         }
 
-        status.textContent = "You are signed in to ChinaFlow.";
-        button.hidden = true;
-        message.textContent = "Authentication complete.";
+        location.assign("/onboarding");
+        return;
       } catch {
         status.textContent = "Unable to sign in. Please try again.";
       } finally {
