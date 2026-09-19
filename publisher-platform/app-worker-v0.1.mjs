@@ -4,6 +4,7 @@ import { completeMagicLinkLogin } from "./auth-login-service-v0.1.mjs";
 import { serializeSessionCookie, readSessionCookie, clearSessionCookie } from "./auth-session-cookie-v0.1.mjs";
 import { validateSession } from "./auth-session-validate-v0.1.mjs";
 import { revokeSessionByToken } from "./auth-session-store-v0.1.mjs";
+import { renderLegalMarkdown } from "./legal-document-v0.1.mjs";
 
 function requireAppOrigin(env) {
   const value = env?.APP_ORIGIN;
@@ -38,6 +39,7 @@ const CONSUME_ROUTE = "/api/auth/consume";
 const SESSION_ROUTE = "/api/auth/session";
 const LOGIN_ROUTE = "/login";
 const LOGOUT_ROUTE = "/api/auth/logout";
+const PUBLISHER_TERMS_ROUTE = "/legal/chinaflow-publisher-terms-v1";
 
 function json(status, body, extraHeaders = {}) {
   const headers = new Headers({
@@ -69,8 +71,66 @@ function html(status, body) {
   });
 }
 
+function legalHtml(status, body) {
+  return new Response(body, {
+    status,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "no-referrer",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    }
+  });
+}
+
 export async function handleAppRequest(request, env) {
   const url = new URL(request.url);
+
+  if (url.pathname === PUBLISHER_TERMS_ROUTE) {
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      return json(
+        405,
+        { error: "method_not_allowed" },
+        { "Allow": "GET, HEAD" }
+      );
+    }
+
+    const source = await import(
+      "./legal/chinaflow-publisher-terms-v1.md",
+      { with: { type: "text" } }
+    );
+
+    const content = renderLegalMarkdown(source.default);
+
+    const document = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChinaFlow Publisher Program Terms</title>
+<style>
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#15202b;background:#fff;margin:0}
+main{max-width:900px;margin:48px auto;padding:0 24px 72px}
+h1{font-size:34px;line-height:1.2;margin:0 0 28px}
+h2{font-size:26px;margin:42px 0 20px;padding-top:8px;border-top:1px solid #d9e2ec}
+h3{font-size:20px;margin:30px 0 12px}
+p,li,blockquote{font-size:16px;line-height:1.7}
+ul{padding-left:24px}
+blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid #0b7285;background:#f6f9fb;color:#52606d}
+code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#f1f3f5;padding:2px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<main>
+${content}
+</main>
+</body>
+</html>`;
+
+    return legalHtml(200, request.method === "HEAD" ? null : document);
+  }
 
   if (url.pathname === "/api/onboarding/terms") {
     if (request.method !== "GET" && request.method !== "POST") {
