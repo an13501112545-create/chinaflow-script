@@ -3,6 +3,9 @@
   "name": "chinaflow-publisher-app-v0-1-test",
   "main": "publisher-platform/app-worker-v0.1.mjs",
   "compatibility_date": "2026-08-14",
+  "compatibility_flags": [
+    "global_fetch_strictly_public"
+  ],
   "d1_databases": [
     {
       "binding": "CHINAFLOW_EVENTS",

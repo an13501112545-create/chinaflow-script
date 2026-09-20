@@ -5,6 +5,7 @@ import { serializeSessionCookie, readSessionCookie, clearSessionCookie } from ".
 import { validateSession } from "./auth-session-validate-v0.1.mjs";
 import { revokeSessionByToken } from "./auth-session-store-v0.1.mjs";
 import { renderLegalMarkdown } from "./legal-document-v0.1.mjs";
+import { verifyPublisherInstallation } from "./onboarding-install-verification-v0.1.mjs";
 
 function requireAppOrigin(env) {
   const value = env?.APP_ORIGIN;
@@ -71,6 +72,7 @@ const LOGIN_ROUTE = "/login";
 const LOGOUT_ROUTE = "/api/auth/logout";
 const PUBLISHER_TERMS_ROUTE = "/legal/chinaflow-publisher-terms-v1";
 const ONBOARDING_ROUTE = "/onboarding";
+const VERIFY_INSTALL_ROUTE = "/api/onboarding/verify-install";
 
 function json(status, body, extraHeaders = {}) {
   const headers = new Headers({
@@ -441,6 +443,55 @@ a{color:#0b7285}
 </main>
 </body>
 </html>`);
+  }
+
+  if (url.pathname === VERIFY_INSTALL_ROUTE) {
+    if (request.method !== "POST") {
+      return json(
+        405,
+        { error: "method_not_allowed" },
+        { "Allow": "POST" }
+      );
+    }
+
+    /*
+     * Reject cross-origin requests before session or D1
+     * processing.
+     */
+    if (
+      request.headers.get("Origin") !==
+      requireAppOrigin(env)
+    ) {
+      return json(
+        403,
+        { error: "forbidden" }
+      );
+    }
+
+    const token =
+      readSessionCookie(
+        request.headers.get("Cookie")
+      );
+
+    if (!token) {
+      return json(
+        401,
+        { error: "unauthenticated" }
+      );
+    }
+
+    const result =
+      await verifyPublisherInstallation({
+        database: env?.CHINAFLOW_EVENTS,
+        token,
+        runtimeOrigin:
+          requireRuntimeOrigin(env)
+      });
+
+    return json(
+      result.status,
+      result.body
+    );
   }
 
   if (url.pathname === "/api/onboarding/terms") {
