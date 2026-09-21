@@ -103,7 +103,7 @@ test("create, authorized GET/retry, exact defaults, no supplier or placement wri
   assert.deepEqual(created.body, { draft: { publisher: {
     publisher_id: p.publisher_id, slug: p.slug, display_name: input.display_name,
     account_status: "draft", install_public_key: p.install_public_key
-  }, primary_domain: { hostname: input.hostname } } });
+  }, primary_domain: { hostname: input.hostname, install_status: "pending", verification_status: "unverified" } } });
   assert.deepEqual((await f.request({ method: "GET" })).body, created.body);
   const retry = await f.request({ body: input });
   assert.equal(retry.status, 200);
@@ -136,7 +136,7 @@ test("different users race for canonical hostname: generic conflict and no orpha
   assert.deepEqual(results.map(r => r.status).sort(), [201, 409]);
   assert.deepEqual(results.find(r => r.status === 409).body, { error: "conflict" });
   assert.deepEqual(f.counts(), [1, 1, 1]);
-  assert.equal((await f.request({ token: f.sessions[1].token, method: "GET" })).status, 404);
+  assert.equal((await f.request({ token: f.sessions[results.findIndex(r => r.status === 409)].token, method: "GET" })).status, 404);
 });
 
 for (const table of ["publishers", "publisher_memberships", "publisher_domains"]) {
@@ -510,3 +510,17 @@ for (const message of [
     assert.deepEqual(f.counts(), [0, 0, 0]);
   });
 }
+
+
+test("GET resumes pending review and installation state while create stays draft-only", async t => {
+  const f = await fixture(t);
+  await f.request();
+  f.sqlite.exec("UPDATE publishers SET account_status='pending_review'; UPDATE publisher_domains SET install_status='detected', verification_status='verified'");
+  const result = await f.request({ method: "GET" });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.draft.publisher.account_status, "pending_review");
+  assert.equal(result.body.draft.primary_domain.install_status, "detected");
+  assert.equal(result.body.draft.primary_domain.verification_status, "verified");
+  assert.equal((await f.request()).status, 409);
+  assert.deepEqual(f.counts(), [1, 1, 1]);
+});

@@ -1,3 +1,4 @@
+import { submitOnboarding } from "./onboarding-submit-v0.1.mjs";
 import { readTermsInput, getOnboardingTerms, acceptOnboardingTerms } from "./onboarding-terms-v0.1.mjs";
 import { readDraftInput, getOnboardingDraft, createOnboardingDraft } from "./onboarding-draft-v0.1.mjs";
 import { completeMagicLinkLogin } from "./auth-login-service-v0.1.mjs";
@@ -236,6 +237,15 @@ a{color:#0b7285}
   <pre id="snippet"></pre>
   <button id="copy-button" type="button">Copy installation code</button>
   <p id="copy-status" class="status"></p>
+  <button id="verify-button" type="button">Verify installation</button>
+  <p id="verify-status" class="status" role="status"></p>
+  <button id="submit-button" class="hidden" type="button">Submit for review</button>
+  <p id="submit-status" class="status" role="status"></p>
+</section>
+
+<section id="submitted" class="card hidden">
+  <h2>Submitted for review</h2>
+  <p id="submission-status" role="status"></p>
 </section>
 
 <p id="fatal" class="status"></p>
@@ -262,7 +272,30 @@ a{color:#0b7285}
   const copyButton = document.getElementById("copy-button");
   const copyStatus = document.getElementById("copy-status");
 
+  const verifyButton = document.getElementById("verify-button");
+  const verifyStatus = document.getElementById("verify-status");
+  const submitButton = document.getElementById("submit-button");
+  const submitStatus = document.getElementById("submit-status");
+  const submitted = document.getElementById("submitted");
+  const submissionStatus = document.getElementById("submission-status");
+
   let currentDraft = null;
+
+  function showSubmitted() {
+    hide(create);
+    hide(terms);
+    hide(install);
+    submissionStatus.textContent = "Your publisher profile is submitted and pending review.";
+    show(submitted);
+  }
+
+  function showInstallState(state) {
+    hide(submitButton);
+    if (state?.install_status === "detected" && state?.verification_status === "verified") {
+      verifyStatus.textContent = "Installation verified.";
+      show(submitButton);
+    }
+  }
 
   function show(element) {
     element.classList.remove("hidden");
@@ -312,6 +345,7 @@ a{color:#0b7285}
 
       snippet.textContent = installCode(key);
       show(install);
+      showInstallState(currentDraft?.primary_domain);
       return;
     }
 
@@ -336,6 +370,11 @@ a{color:#0b7285}
 
     const body = await readJson(response);
     currentDraft = body.draft;
+
+    if (currentDraft?.publisher?.account_status === "pending_review") {
+      showSubmitted();
+      return;
+    }
 
     if (!currentDraft?.publisher?.install_public_key) {
       throw new Error("Publisher profile is incomplete.");
@@ -428,6 +467,49 @@ a{color:#0b7285}
     }
   });
 
+  verifyButton.addEventListener("click", async () => {
+    verifyButton.disabled = true;
+    submitButton.disabled = true;
+    hide(submitButton);
+    verifyStatus.textContent = "Checking installation...";
+    try {
+      const response = await fetch("/api/onboarding/verify-install", { method: "POST" });
+      const body = await readJson(response);
+      if (!response.ok || !body.verification) {
+        throw new Error("Verification unavailable");
+      }
+      currentDraft.primary_domain = body.verification;
+      verifyStatus.textContent = "Installation not detected. Check your website and try again.";
+      showInstallState(body.verification);
+    } catch {
+      verifyStatus.textContent = "Unable to verify installation. Please try again.";
+    } finally {
+      verifyButton.disabled = false;
+      submitButton.disabled = false;
+    }
+  });
+
+  submitButton.addEventListener("click", async () => {
+    submitButton.disabled = true;
+    verifyButton.disabled = true;
+    submitStatus.textContent = "Submitting...";
+    try {
+      const response = await fetch("/api/onboarding/submit", { method: "POST" });
+      const body = await readJson(response);
+      if (!response.ok || body.submission?.account_status !== "pending_review" ||
+          body.submission?.submitted !== true) {
+        throw new Error("Submission unavailable");
+      }
+      currentDraft.publisher.account_status = "pending_review";
+      showSubmitted();
+    } catch {
+      submitStatus.textContent = "Unable to submit. Refresh your profile, verify installation, and try again.";
+    } finally {
+      submitButton.disabled = false;
+      verifyButton.disabled = false;
+    }
+  });
+
   copyButton.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(snippet.textContent);
@@ -443,6 +525,21 @@ a{color:#0b7285}
 </main>
 </body>
 </html>`);
+  }
+
+  if (url.pathname === "/api/onboarding/submit") {
+    if (request.method !== "POST") {
+      return json(405, { error: "method_not_allowed" }, { "Allow": "POST" });
+    }
+    if (request.headers.get("Origin") !== requireAppOrigin(env)) {
+      return json(403, { error: "forbidden" });
+    }
+    const token = readSessionCookie(request.headers.get("Cookie"));
+    if (!token) return json(401, { error: "unauthenticated" });
+    // Submission has no client-selected tenant or other input.
+    if (url.search || request.body !== null) return json(400, { error: "invalid_input" });
+    const result = await submitOnboarding(env?.CHINAFLOW_EVENTS, token);
+    return json(result.status, result.body);
   }
 
   if (url.pathname === VERIFY_INSTALL_ROUTE) {

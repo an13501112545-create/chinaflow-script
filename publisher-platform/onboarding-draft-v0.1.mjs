@@ -51,13 +51,13 @@ const ELIGIBLE_SESSION = `SELECT 1 FROM publisher_sessions s
   WHERE s.session_id = ? AND s.user_id = ? AND s.revoked_at IS NULL
     AND julianday(s.expires_at) > julianday('now') AND u.user_status = 'active'`;
 
-async function readAuthorizedDraft(database, session) {
+async function readAuthorizedDraft(database, session, includePendingReview = false) {
   const row = await database.prepare(`
-    SELECT p.publisher_id, p.slug, p.display_name, p.account_status, p.install_public_key, d.hostname
+    SELECT p.publisher_id, p.slug, p.display_name, p.account_status, p.install_public_key, d.hostname, d.install_status, d.verification_status
     FROM publisher_memberships m
     JOIN publishers p ON p.publisher_id = m.publisher_id
     JOIN publisher_domains d ON d.publisher_id = p.publisher_id AND d.is_primary = 1
-    WHERE m.user_id = ? AND m.membership_status = 'active' AND p.account_status = 'draft'
+    WHERE m.user_id = ? AND m.membership_status = 'active' AND (p.account_status = 'draft' ${includePendingReview ? "OR p.account_status = 'pending_review'" : ""})
       AND EXISTS (${ELIGIBLE_SESSION})
     ORDER BY m.created_at, m.membership_id LIMIT 1
   `).bind(session.userId, session.sessionId, session.userId).first();
@@ -66,7 +66,8 @@ async function readAuthorizedDraft(database, session) {
     publisher: { publisher_id: row.publisher_id, slug: row.slug,
       display_name: row.display_name, account_status: row.account_status,
       install_public_key: row.install_public_key },
-    primary_domain: { hostname: row.hostname }
+    primary_domain: { hostname: row.hostname, install_status: row.install_status,
+      verification_status: row.verification_status }
   };
 }
 
@@ -85,7 +86,7 @@ function uniqueField(error) {
 export async function getOnboardingDraft(database, token) {
   const session = await validateSession(database, token);
   if (!session) return { status: 401, body: { error: "unauthenticated" } };
-  const draft = await readAuthorizedDraft(database, session);
+  const draft = await readAuthorizedDraft(database, session, true);
   return draft ? { status: 200, body: { draft } } : { status: 404, body: { error: "not_found" } };
 }
 
