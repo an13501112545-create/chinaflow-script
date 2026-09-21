@@ -103,7 +103,14 @@ test("create, authorized GET/retry, exact defaults, no supplier or placement wri
   assert.deepEqual(created.body, { draft: { publisher: {
     publisher_id: p.publisher_id, slug: p.slug, display_name: input.display_name,
     account_status: "draft", install_public_key: p.install_public_key
-  }, primary_domain: { hostname: input.hostname, install_status: "pending", verification_status: "unverified" } } });
+  }, primary_domain: {
+    hostname: input.hostname,
+    install_status: "pending",
+    verification_status: "unverified",
+    review_status: "pending",
+    monetization_status: "disabled",
+    reviewed_at: null
+  } } });
   assert.deepEqual((await f.request({ method: "GET" })).body, created.body);
   const retry = await f.request({ body: input });
   assert.equal(retry.status, 200);
@@ -521,6 +528,39 @@ test("GET resumes pending review and installation state while create stays draft
   assert.equal(result.body.draft.publisher.account_status, "pending_review");
   assert.equal(result.body.draft.primary_domain.install_status, "detected");
   assert.equal(result.body.draft.primary_domain.verification_status, "verified");
+  assert.equal(result.body.draft.primary_domain.review_status, "pending");
+  assert.equal(result.body.draft.primary_domain.monetization_status, "disabled");
+  assert.equal(result.body.draft.primary_domain.reviewed_at, null);
+  assert.equal((await f.request()).status, 409);
+  assert.deepEqual(f.counts(), [1, 1, 1]);
+});
+
+test("GET resumes approved and rejected review outcomes without allowing recreation", async t => {
+  const f = await fixture(t);
+  await f.request();
+  f.sqlite.exec(`
+    UPDATE publishers SET account_status='pending_review';
+    UPDATE publisher_domains
+      SET install_status='detected',
+          verification_status='verified',
+          review_status='approved',
+          reviewed_at=CURRENT_TIMESTAMP
+  `);
+  let result = await f.request({ method: "GET" });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.draft.publisher.account_status, "pending_review");
+  assert.equal(result.body.draft.primary_domain.review_status, "approved");
+  assert.ok(result.body.draft.primary_domain.reviewed_at);
+  assert.equal((await f.request()).status, 409);
+
+  f.sqlite.exec(`
+    UPDATE publishers SET account_status='rejected';
+    UPDATE publisher_domains SET review_status='rejected'
+  `);
+  result = await f.request({ method: "GET" });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.draft.publisher.account_status, "rejected");
+  assert.equal(result.body.draft.primary_domain.review_status, "rejected");
   assert.equal((await f.request()).status, 409);
   assert.deepEqual(f.counts(), [1, 1, 1]);
 });

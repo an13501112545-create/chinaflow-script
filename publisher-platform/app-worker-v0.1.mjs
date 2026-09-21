@@ -263,7 +263,7 @@ a{color:#0b7285}
 </section>
 
 <section id="submitted" class="card hidden">
-  <h2>Submitted for review</h2>
+  <h2 id="submission-heading">Submitted for review</h2>
   <p id="submission-status" role="status"></p>
 </section>
 
@@ -296,15 +296,38 @@ a{color:#0b7285}
   const submitButton = document.getElementById("submit-button");
   const submitStatus = document.getElementById("submit-status");
   const submitted = document.getElementById("submitted");
+  const submissionHeading = document.getElementById("submission-heading");
   const submissionStatus = document.getElementById("submission-status");
 
   let currentDraft = null;
 
-  function showSubmitted() {
+  function showReviewState() {
     hide(create);
     hide(terms);
     hide(install);
-    submissionStatus.textContent = "Your publisher profile is submitted and pending review.";
+
+    const accountStatus = currentDraft?.publisher?.account_status;
+    const reviewStatus = currentDraft?.primary_domain?.review_status;
+
+    if (accountStatus === "rejected" || reviewStatus === "rejected") {
+      submissionHeading.textContent = "Application not approved";
+      submissionStatus.textContent =
+        "Your publisher application was not approved. Contact ChinaFlow if you need clarification.";
+      show(submitted);
+      return;
+    }
+
+    if (accountStatus === "pending_review" && reviewStatus === "approved") {
+      submissionHeading.textContent = "Review approved";
+      submissionStatus.textContent =
+        "Your publisher profile has been approved. Supplier provisioning is in progress.";
+      show(submitted);
+      return;
+    }
+
+    submissionHeading.textContent = "Submitted for review";
+    submissionStatus.textContent =
+      "Your publisher profile is submitted and pending review.";
     show(submitted);
   }
 
@@ -390,8 +413,9 @@ a{color:#0b7285}
     const body = await readJson(response);
     currentDraft = body.draft;
 
-    if (currentDraft?.publisher?.account_status === "pending_review") {
-      showSubmitted();
+    if (currentDraft?.publisher?.account_status === "pending_review" ||
+        currentDraft?.publisher?.account_status === "rejected") {
+      showReviewState();
       return;
     }
 
@@ -520,7 +544,8 @@ a{color:#0b7285}
         throw new Error("Submission unavailable");
       }
       currentDraft.publisher.account_status = "pending_review";
-      showSubmitted();
+      currentDraft.primary_domain.review_status = "pending";
+      showReviewState();
     } catch {
       submitStatus.textContent = "Unable to submit. Refresh your profile, verify installation, and try again.";
     } finally {

@@ -85,7 +85,13 @@ test("onboarding runtime origin fails closed when missing", async () => {
 });
 
 
-async function page(t, accountStatus = "draft", installStatus = "pending", verificationStatus = "unverified") {
+async function page(
+  t,
+  accountStatus = "draft",
+  installStatus = "pending",
+  verificationStatus = "unverified",
+  reviewStatus = "pending"
+) {
   const response = await worker.fetch(new Request(env.APP_ORIGIN + "/onboarding"), env);
   const html = await response.text();
   const elements = new Map();
@@ -108,7 +114,13 @@ async function page(t, accountStatus = "draft", installStatus = "pending", verif
     let status = 200;
     if (url.endsWith("/draft")) body = { draft: {
       publisher: { account_status: accountStatus, install_public_key: "cfi_0123456789abcdef0123456789abcdef" },
-      primary_domain: { install_status: installStatus, verification_status: verificationStatus }
+      primary_domain: {
+        install_status: installStatus,
+        verification_status: verificationStatus,
+        review_status: reviewStatus,
+        monetization_status: "disabled",
+        reviewed_at: reviewStatus === "pending" ? null : "2026-09-21 00:00:00"
+      }
     } };
     if (url.endsWith("/terms")) body = { terms: { terms_version: "chinaflow-publisher-terms-v1", accepted: true } };
     if (url.endsWith("/verify-install")) body = { verification: {
@@ -159,6 +171,35 @@ test("pending review refresh shows stable submitted state without loading draft-
   assert.equal(p.visible("submitted"), true);
   assert.match(p.element("submission-status").textContent, /pending review/i);
   for (const id of ["create", "terms", "install"]) assert.equal(p.visible(id), false);
+  assert.equal(p.calls.some(c => c.url.endsWith("/terms")), false);
+});
+
+test("approved review refresh shows provisioning state", async t => {
+  const p = await page(
+    t,
+    "pending_review",
+    "detected",
+    "verified",
+    "approved"
+  );
+  assert.equal(p.visible("submitted"), true);
+  assert.match(p.element("submission-heading").textContent, /review approved/i);
+  assert.match(p.element("submission-status").textContent, /provisioning/i);
+  for (const id of ["create", "terms", "install"]) assert.equal(p.visible(id), false);
+  assert.equal(p.calls.some(c => c.url.endsWith("/terms")), false);
+});
+
+test("rejected review refresh never falls back to create publisher", async t => {
+  const p = await page(
+    t,
+    "rejected",
+    "detected",
+    "verified",
+    "rejected"
+  );
+  assert.equal(p.visible("submitted"), true);
+  assert.match(p.element("submission-heading").textContent, /not approved/i);
+  assert.equal(p.visible("create"), false);
   assert.equal(p.calls.some(c => c.url.endsWith("/terms")), false);
 });
 
