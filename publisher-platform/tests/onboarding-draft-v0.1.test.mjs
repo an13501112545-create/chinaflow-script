@@ -9,6 +9,7 @@ import { createMagicLink } from "../auth-magic-link-store-v0.1.mjs";
 import { buildPublisherConfigFromD1 } from "../config-reader-d1-v0.1.mjs";
 
 const TEST_APP_ORIGIN = "https://app.getchinaflow.com";
+const TEST_AUTH_ORIGIN = "https://auth.getchinaflow.com";
 
 async function fixture(t) {
   const sqlite = new DatabaseSync(":memory:");
@@ -234,6 +235,32 @@ for (const appOrigin of [null, "", "not an origin", "http://app.getchinaflow.com
   });
 }
 
+for (const authOrigin of [
+  null,
+  "",
+  "not an origin",
+  "http://auth.getchinaflow.com",
+  "https://auth.getchinaflow.com/"
+]) {
+  test(`login page fails closed for configured CHINAFLOW_AUTH_ORIGIN ${authOrigin}`, async t => {
+    const f = await fixture(t);
+    const env = {
+      CHINAFLOW_EVENTS: f.db,
+      APP_ORIGIN: TEST_APP_ORIGIN
+    };
+    if (authOrigin !== null) env.CHINAFLOW_AUTH_ORIGIN = authOrigin;
+    const response = await worker.fetch(
+      new Request(`${TEST_APP_ORIGIN}/login`),
+      env
+    );
+    assert.equal(response.status, 500);
+    assert.deepEqual(
+      await response.json(),
+      { error: "internal_error" }
+    );
+  });
+}
+
 for (const mode of ["missing", "bad", "expired", "revoked", "disabled"]) {
   test(`GET and POST reject ${mode} session`, async t => {
     const f = await fixture(t);
@@ -389,10 +416,21 @@ test("app login/consume/session/logout regressions and host-only cookie", async 
   assert.match(logout.headers.get("Set-Cookie"), /Max-Age=0/);
   assert.equal((await f.request({ method: "GET", path: "/api/auth/session", token })).status, 401);
   assert.equal((await f.request({ token })).status, 401);
-  const page = await handleAppRequest(new Request(`${TEST_APP_ORIGIN}/login`), { CHINAFLOW_EVENTS: f.db, APP_ORIGIN: TEST_APP_ORIGIN });
+  const page = await handleAppRequest(
+    new Request(`${TEST_APP_ORIGIN}/login`),
+    {
+      CHINAFLOW_EVENTS: f.db,
+      APP_ORIGIN: TEST_APP_ORIGIN,
+      CHINAFLOW_AUTH_ORIGIN: TEST_AUTH_ORIGIN
+    }
+  );
   assert.equal(page.status, 200);
   const pageHtml = await page.text();
   assert.match(pageHtml, /Continue sign in/);
+  assert.match(pageHtml, /Email me a sign-in link/);
+  assert.match(pageHtml, /type="email"/);
+  assert.equal(pageHtml.includes(TEST_AUTH_ORIGIN), true);
+  assert.match(pageHtml, /\/v1\/auth\/magic-link/);
   assert.match(pageHtml, /location\.assign\(["']\/onboarding["']\)/);
 });
 

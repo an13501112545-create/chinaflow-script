@@ -38,6 +38,36 @@ function requireAppOrigin(env) {
   return value;
 }
 
+function requireAuthOrigin(env) {
+  const value = env?.CHINAFLOW_AUTH_ORIGIN;
+
+  if (typeof value !== "string" || value.length === 0 || value.length > 2048) {
+    throw new Error("CHINAFLOW_AUTH_ORIGIN binding unavailable or invalid");
+  }
+
+  let parsed;
+
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("CHINAFLOW_AUTH_ORIGIN binding unavailable or invalid");
+  }
+
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.pathname !== "/" ||
+    parsed.search !== "" ||
+    parsed.hash !== "" ||
+    parsed.origin !== value
+  ) {
+    throw new Error("CHINAFLOW_AUTH_ORIGIN binding unavailable or invalid");
+  }
+
+  return value;
+}
+
 function requireRuntimeOrigin(env) {
   const value = env?.CHINAFLOW_RUNTIME_ORIGIN;
 
@@ -726,6 +756,8 @@ a{color:#0b7285}
       return json(405, { error: "method_not_allowed" });
     }
 
+    const authOrigin = requireAuthOrigin(env);
+
     return html(200, `<!doctype html>
 <html lang="en">
 <head>
@@ -738,21 +770,57 @@ h1{font-size:28px;margin-bottom:12px}
 p{line-height:1.5;color:#52606d}
 button{margin-top:18px;padding:12px 18px;border:0;border-radius:8px;background:#0b7285;color:white;font-size:16px;cursor:pointer}
 button:disabled{opacity:.55;cursor:default}
+form{margin-top:18px}
+input{box-sizing:border-box;width:100%;padding:12px 14px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px}
 #status{margin-top:18px}
 </style>
 </head>
 <body>
 <h1>Sign in to ChinaFlow</h1>
 <p id="message">Checking your sign-in link…</p>
+<form id="request-link" hidden>
+  <label for="email">Email address</label>
+  <input id="email" type="email" autocomplete="email" required>
+  <button id="send-link" type="submit">Email me a sign-in link</button>
+</form>
 <button id="continue" hidden>Continue sign in</button>
 <p id="status"></p>
 <script>
 (() => {
+  const authOrigin = ${JSON.stringify(authOrigin)};
   const params = new URLSearchParams(location.search);
   const token = params.get("token");
   const button = document.getElementById("continue");
+  const form = document.getElementById("request-link");
+  const email = document.getElementById("email");
+  const sendLink = document.getElementById("send-link");
   const message = document.getElementById("message");
   const status = document.getElementById("status");
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    sendLink.disabled = true;
+    status.textContent = "Sending sign-in link…";
+
+    try {
+      const response = await fetch(authOrigin + "/v1/auth/magic-link", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({email: email.value})
+      });
+
+      if (!response.ok) {
+        status.textContent = "Unable to send a sign-in link. Please check your email address.";
+        return;
+      }
+
+      status.textContent = "Check your email for a secure ChinaFlow sign-in link.";
+    } catch {
+      status.textContent = "Unable to send a sign-in link. Please try again.";
+    } finally {
+      sendLink.disabled = false;
+    }
+  });
 
   if (token) {
     history.replaceState({}, "", "/login");
@@ -799,11 +867,13 @@ button:disabled{opacity:.55;cursor:default}
       if (response.ok) {
         message.textContent = "You are already signed in to ChinaFlow.";
       } else {
-        message.textContent = "No active sign-in link was found.";
+        message.textContent = "Enter your email to receive a secure sign-in link.";
+        form.hidden = false;
       }
     })
     .catch(() => {
-      message.textContent = "Unable to check your session.";
+      message.textContent = "Enter your email to receive a secure sign-in link.";
+      form.hidden = false;
     });
 })();
 </script>
