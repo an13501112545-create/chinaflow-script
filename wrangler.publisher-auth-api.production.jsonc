@@ -15,6 +15,9 @@
     "AUTH_ENVIRONMENT": "production",
     "APP_ORIGIN": "https://chinaflow-publisher-app-v0-1.an13501112545.workers.dev"
   },
+  "secrets": {
+    "required": ["RESEND_API_KEY"]
+  },
   "ratelimits": [
     {
       "name": "MAGIC_LINK_EMAIL_RATE_LIMITER",
