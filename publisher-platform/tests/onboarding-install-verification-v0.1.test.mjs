@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { createSession } from "../auth-session-store-v0.1.mjs";
 import * as installVerification from "../onboarding-install-verification-v0.1.mjs";
@@ -11,7 +12,7 @@ const VERIFY_PATH = "/api/onboarding/verify-install";
 
 const built = await build({
   entryPoints: [
-    new URL("../app-worker-v0.1.mjs", import.meta.url).pathname
+    fileURLToPath(new URL("../app-worker-v0.1.mjs", import.meta.url))
   ],
   bundle: true,
   write: false,

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { build } from "esbuild";
 
 const built = await build({
-  entryPoints: [new URL("../app-worker-v0.1.mjs", import.meta.url).pathname],
+  entryPoints: [fileURLToPath(new URL("../app-worker-v0.1.mjs", import.meta.url))],
   bundle: true,
   write: false,
   format: "esm",

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import worker from '../app-worker-v0.1.mjs';
 import { createSession } from '../auth-session-store-v0.1.mjs';
 import { TERMS_VERSION } from '../onboarding-terms-v0.1.mjs';
@@ -326,7 +327,7 @@ test('unexpected database failure is generic',async t=>{
 test('real local workerd/D1: concurrent owners, retry, denial, immutable attribution and protected tables', async t => {
   const { Miniflare, convertV4MiniflareOptions } = await import('miniflare');
   const { build } = await import('esbuild');
-  const bundle = await build({ entryPoints: [new URL('../app-worker-v0.1.mjs', import.meta.url).pathname], bundle: true, write: false, format: 'esm', platform: 'browser' });
+  const bundle = await build({ entryPoints: [fileURLToPath(new URL('../app-worker-v0.1.mjs', import.meta.url))], bundle: true, write: false, format: 'esm', platform: 'browser' });
   const adapt = convertV4MiniflareOptions ?? (options => options);
   const mf = new Miniflare(adapt({ d1Persist: false, workers: [{ name: "terms-local", modules: true,
     script: bundle.outputFiles[0].text,
