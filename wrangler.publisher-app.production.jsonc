@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "chinaflow-publisher-app-v0-1",
+  "main": "publisher-platform/app-worker-v0.1.mjs",
+  "compatibility_date": "2026-08-14",
+  "compatibility_flags": [
+    "global_fetch_strictly_public"
+  ],
+  "d1_databases": [
+    {
+      "binding": "CHINAFLOW_EVENTS",
+      "database_name": "chinaflow-events-v0-1",
+      "database_id": "838917da-3fb8-437e-bc00-caff178798e8",
+      "migrations_dir": "collector/migrations"
+    }
+  ],
+  "vars": {
+    "APP_ENVIRONMENT": "production",
+    "APP_ORIGIN": "https://chinaflow-publisher-app-v0-1.an13501112545.workers.dev",
+    "CHINAFLOW_AUTH_ORIGIN": "https://chinaflow-auth-api-v0-1.an13501112545.workers.dev",
+    "CHINAFLOW_RUNTIME_ORIGIN": "https://chinaflow-config-api-v0-1.an13501112545.workers.dev"
+  }
+}

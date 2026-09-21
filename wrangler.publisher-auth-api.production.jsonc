@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "chinaflow-auth-api-v0-1",
+  "main": "publisher-platform/auth-api-worker-v0.1.mjs",
+  "compatibility_date": "2026-08-14",
+  "d1_databases": [
+    {
+      "binding": "CHINAFLOW_EVENTS",
+      "database_name": "chinaflow-events-v0-1",
+      "database_id": "838917da-3fb8-437e-bc00-caff178798e8",
+      "migrations_dir": "collector/migrations"
+    }
+  ],
+  "vars": {
+    "AUTH_ENVIRONMENT": "production",
+    "APP_ORIGIN": "https://chinaflow-publisher-app-v0-1.an13501112545.workers.dev"
+  },
+  "ratelimits": [
+    {
+      "name": "MAGIC_LINK_EMAIL_RATE_LIMITER",
+      "namespace_id": "26092101",
+      "simple": {
+        "limit": 3,
+        "period": 60
+      }
+    },
+    {
+      "name": "MAGIC_LINK_IP_RATE_LIMITER",
+      "namespace_id": "26092102",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
+    }
+  ]
+}

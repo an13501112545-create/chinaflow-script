@@ -190,6 +190,7 @@ const fkViolations = d1("PRAGMA foreign_key_check");
 
 const prodPublisherConfigs = [
   "wrangler.publisher-app.production.jsonc",
+  "wrangler.publisher-auth-api.production.jsonc",
   "wrangler.publisher-config-api.production.jsonc",
   "wrangler.publisher-review-api.production.jsonc",
   "wrangler.publisher-provisioning-api.production.jsonc",
