@@ -31,21 +31,52 @@ function wrangler(args) {
   return run(npx, ["wrangler", ...args]);
 }
 
+function isTransientD1AuthError(error) {
+  const output = [
+    error?.message,
+    error?.stdout,
+    error?.stderr
+  ].filter(Boolean).join("\n");
+  return (
+    output.includes("Authentication error") &&
+    output.includes("10000")
+  );
+}
+
+function sleepSync(ms) {
+  Atomics.wait(
+    new Int32Array(new SharedArrayBuffer(4)),
+    0,
+    0,
+    ms
+  );
+}
+
 function d1(sql) {
-  const raw = wrangler([
-    "d1", "execute", DB,
-    "--remote",
-    "--config", CONFIG,
-    "--yes",
-    "--json",
-    "--command", sql
-  ]);
-  const parsed = JSON.parse(raw);
-  const first = Array.isArray(parsed) ? parsed[0] : parsed;
-  if (!first || first.success !== true) {
-    throw new Error("TEST D1 command failed");
+  let lastError;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      const raw = wrangler([
+        "d1", "execute", DB,
+        "--remote",
+        "--config", CONFIG,
+        "--yes",
+        "--json",
+        "--command", sql
+      ]);
+      const parsed = JSON.parse(raw);
+      const first = Array.isArray(parsed) ? parsed[0] : parsed;
+      if (!first || first.success !== true) {
+        throw new Error("TEST D1 command failed");
+      }
+      return first.results ?? [];
+    } catch (error) {
+      lastError = error;
+      if (!isTransientD1AuthError(error) || attempt === 5) throw error;
+      sleepSync(attempt * 1000);
+    }
   }
-  return first.results ?? [];
+  throw lastError;
 }
 
 function one(sql) {
@@ -245,6 +276,8 @@ function cleanup() {
   fixtureCreated = false;
 }
 
+let primaryError = null;
+
 try {
   fixtureCreated = true;
   d1(`
@@ -396,8 +429,21 @@ try {
     "2001-01-01 00:00:00",
     "Retry must not mutate publisher"
   );
+} catch (error) {
+  primaryError = error;
+  throw error;
 } finally {
-  cleanup();
+  try {
+    cleanup();
+  } catch (cleanupError) {
+    if (!primaryError) throw cleanupError;
+    console.error(
+      "E9 cleanup also failed for synthetic suffix " +
+        suffix +
+        ": " +
+        cleanupError.message
+    );
+  }
 }
 
 assert.deepEqual(
