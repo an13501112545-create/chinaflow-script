@@ -3,7 +3,7 @@ import { isValidInstallPublicKey } from "./install-public-key-v0.1.mjs";
 
 const failure = (status, error) => ({ status, body: { error } });
 
-function validInput(input) {
+export function validateReviewInput(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
   const keys = Object.keys(input);
   if (keys.length !== 2 ||
@@ -194,7 +194,7 @@ async function reviewReject(database, state) {
 }
 
 export async function reviewPublisher(database, input) {
-  const valid = validInput(input);
+  const valid = validateReviewInput(input);
   if (!valid) return failure(400, "invalid_input");
 
   const state = await readState(database, valid.publisherId);
