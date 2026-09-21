@@ -242,16 +242,58 @@ async function call(base, path, init = {}) {
 }
 
 async function waitForReviewApi() {
-  let lastStatus = null;
+  let healthStatus = null;
+  let patchStatus = null;
+  let patchAllow = null;
+  let authenticatedInvalidStatus = null;
+
   for (let attempt = 1; attempt <= 80; attempt += 1) {
-    const response = await call(REVIEW, "/health", { method: "GET" });
-    lastStatus = response.status;
-    await response.arrayBuffer();
-    if (lastStatus === 200) return;
+    const health = await call(REVIEW, "/health", { method: "GET" });
+    healthStatus = health.status;
+    await health.arrayBuffer();
+
+    const patch = await call(
+      REVIEW,
+      "/api/internal/publisher-review",
+      { method: "PATCH" }
+    );
+    patchStatus = patch.status;
+    patchAllow = patch.headers.get("allow");
+    await patch.arrayBuffer();
+
+    const authenticatedInvalid = await call(
+      REVIEW,
+      "/api/internal/publisher-review",
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + reviewToken,
+          "Content-Type": "application/json"
+        },
+        body: "{}"
+      }
+    );
+    authenticatedInvalidStatus = authenticatedInvalid.status;
+    await authenticatedInvalid.arrayBuffer();
+
+    if (
+      healthStatus === 200 &&
+      patchStatus === 405 &&
+      patchAllow === "POST" &&
+      authenticatedInvalidStatus === 400
+    ) {
+      return;
+    }
+
     await new Promise(resolve => setTimeout(resolve, 500));
   }
+
   throw new Error(
-    "TEST review Worker did not become ready: status=" + lastStatus
+    "TEST review Worker did not become ready after secret propagation: " +
+      "health=" + healthStatus +
+      ", patch=" + patchStatus +
+      ", allow=" + patchAllow +
+      ", authenticated_invalid=" + authenticatedInvalidStatus
   );
 }
 
