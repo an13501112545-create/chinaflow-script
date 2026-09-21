@@ -15,5 +15,8 @@
   ],
   "vars": {
     "APP_ENVIRONMENT": "production"
+  },
+  "secrets": {
+    "required": ["ACTIVATION_API_TOKEN"]
   }
 }
