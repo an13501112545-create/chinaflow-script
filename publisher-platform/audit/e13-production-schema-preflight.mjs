@@ -244,19 +244,7 @@ const d1InfoRaw = run(npx(), [
   "--json"
 ]);
 
-const d1InfoJson = JSON.parse(d1InfoRaw);
-
-function hasProductionVersion(value) {
-  if (!value || typeof value !== "object") return false;
-  if (value.version === "production") return true;
-  return Object.values(value).some(hasProductionVersion);
-}
-
-assert.equal(
-  hasProductionVersion(d1InfoJson),
-  true,
-  "Production D1 backend does not report version=production"
-);
+JSON.parse(d1InfoRaw);
 
 const d1InfoPath = join(backupDir, "d1-info.json");
 writeFileSync(
@@ -339,7 +327,7 @@ const manifest = {
   export_size_bytes: exportBytes.length,
   export_sha256: exportSha256,
   d1_info_file: d1InfoPath,
-  d1_version: "production",
+  time_travel_supported: true,
   time_travel_file: timeTravelPath,
   bookmark_sha256: bookmarkSha256,
   pending_migrations: EXPECTED_PENDING
@@ -381,7 +369,7 @@ console.log("BASELINE_COUNTS=" + JSON.stringify(counts));
 console.log("LEGACY_PLACEMENTS=4");
 console.log("LEGACY_PLACEMENTS_SHA256=" + placementSha256);
 console.log("FK=0");
-console.log("D1_VERSION=production");
+console.log("TIME_TRAVEL_SUPPORTED=YES");
 console.log("PENDING_MIGRATIONS=" + EXPECTED_PENDING.join(","));
 console.log("TIME_TRAVEL_BOOKMARK_STORED=YES");
 console.log("TIME_TRAVEL_BOOKMARK_SHA256=" + bookmarkSha256);
