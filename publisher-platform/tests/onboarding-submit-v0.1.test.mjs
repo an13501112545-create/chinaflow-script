@@ -74,6 +74,25 @@ test("submit method, exact Origin, and missing cookie reject before D1/session p
   }), env)).status, 401);
 });
 
+test("empty non-null request body is accepted but actual payload is rejected", async t => {
+  const f = await fixture(t);
+  const empty = new Uint8Array(0);
+  const probe = new Request(origin + path, {
+    method: "POST",
+    body: empty
+  });
+  assert.notEqual(probe.body, null);
+
+  assert.equal(
+    (await f.request({ body: empty })).status,
+    200
+  );
+  assert.equal(
+    (await f.request({ body: "{}" })).status,
+    400
+  );
+});
+
 test("verified draft submits without review approval or suppliers; retry does not mutate", async t => {
   const f = await fixture(t);
   const tables = ["publisher_domains", "publisher_supplier_sites", "publisher_supplier_offers", "publisher_placements"];

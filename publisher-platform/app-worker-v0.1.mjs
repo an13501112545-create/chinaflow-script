@@ -119,6 +119,25 @@ function legalHtml(status, body) {
   });
 }
 
+async function hasNonEmptyRequestBody(request) {
+  if (request.body === null) return false;
+
+  const reader = request.body.getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return false;
+      if (value?.byteLength > 0) return true;
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // The stream may already be closed or consumed.
+    }
+  }
+}
+
 export async function handleAppRequest(request, env) {
   const url = new URL(request.url);
 
@@ -537,7 +556,7 @@ a{color:#0b7285}
     const token = readSessionCookie(request.headers.get("Cookie"));
     if (!token) return json(401, { error: "unauthenticated" });
     // Submission has no client-selected tenant or other input.
-    if (url.search || request.body !== null) return json(400, { error: "invalid_input" });
+    if (url.search || await hasNonEmptyRequestBody(request)) return json(400, { error: "invalid_input" });
     const result = await submitOnboarding(env?.CHINAFLOW_EVENTS, token);
     return json(result.status, result.body);
   }

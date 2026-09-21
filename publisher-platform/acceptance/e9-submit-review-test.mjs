@@ -337,13 +337,14 @@ try {
       headers
     }
   );
+  const firstBody = await first.json();
   assert.equal(
     first.status,
     200,
-    "First submit must succeed"
+    "First submit must succeed: " + JSON.stringify(firstBody)
   );
   assert.deepEqual(
-    await first.json(),
+    firstBody,
     {
       submission: {
         account_status: "pending_review",
