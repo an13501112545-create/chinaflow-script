@@ -121,7 +121,33 @@ function json(status, body, extraHeaders = {}) {
   return new Response(JSON.stringify(body), { status, headers });
 }
 
-function html(status, body) {
+function html(status, body, connectOrigin = null) {
+  let connectSrc = "'self'";
+
+  if (connectOrigin !== null) {
+    let parsed;
+
+    try {
+      parsed = new URL(connectOrigin);
+    } catch {
+      throw new Error("HTML connect origin is invalid");
+    }
+
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username !== "" ||
+      parsed.password !== "" ||
+      parsed.pathname !== "/" ||
+      parsed.search !== "" ||
+      parsed.hash !== "" ||
+      parsed.origin !== connectOrigin
+    ) {
+      throw new Error("HTML connect origin is invalid");
+    }
+
+    connectSrc += " " + connectOrigin;
+  }
+
   return new Response(body, {
     status,
     headers: {
@@ -130,7 +156,7 @@ function html(status, body) {
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "DENY",
       "Referrer-Policy": "no-referrer",
-      "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+      "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src " + connectSrc + "; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
     }
   });
 }
@@ -878,7 +904,7 @@ input{box-sizing:border-box;width:100%;padding:12px 14px;border:1px solid #cbd5e
 })();
 </script>
 </body>
-</html>`);
+</html>`, authOrigin);
   }
 
   if (url.pathname === CONSUME_ROUTE) {

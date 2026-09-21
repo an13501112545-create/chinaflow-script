@@ -10,6 +10,7 @@ import { buildPublisherConfigFromD1 } from "../config-reader-d1-v0.1.mjs";
 
 const TEST_APP_ORIGIN = "https://app.getchinaflow.com";
 const TEST_AUTH_ORIGIN = "https://auth.getchinaflow.com";
+const TEST_RUNTIME_ORIGIN = "https://runtime.getchinaflow.com";
 
 async function fixture(t) {
   const sqlite = new DatabaseSync(":memory:");
@@ -425,6 +426,9 @@ test("app login/consume/session/logout regressions and host-only cookie", async 
     }
   );
   assert.equal(page.status, 200);
+  const loginCsp = page.headers.get("Content-Security-Policy");
+  assert.match(loginCsp, /connect-src 'self'/);
+  assert.equal(loginCsp.includes(TEST_AUTH_ORIGIN), true);
   const pageHtml = await page.text();
   assert.match(pageHtml, /Continue sign in/);
   assert.match(pageHtml, /Email me a sign-in link/);
@@ -432,6 +436,20 @@ test("app login/consume/session/logout regressions and host-only cookie", async 
   assert.equal(pageHtml.includes(TEST_AUTH_ORIGIN), true);
   assert.match(pageHtml, /\/v1\/auth\/magic-link/);
   assert.match(pageHtml, /location\.assign\(["']\/onboarding["']\)/);
+
+  const onboardingPage = await handleAppRequest(
+    new Request(`${TEST_APP_ORIGIN}/onboarding`),
+    {
+      CHINAFLOW_EVENTS: f.db,
+      APP_ORIGIN: TEST_APP_ORIGIN,
+      CHINAFLOW_RUNTIME_ORIGIN: TEST_RUNTIME_ORIGIN
+    }
+  );
+  assert.equal(onboardingPage.status, 200);
+  const onboardingCsp =
+    onboardingPage.headers.get("Content-Security-Policy");
+  assert.match(onboardingCsp, /connect-src 'self'/);
+  assert.equal(onboardingCsp.includes(TEST_AUTH_ORIGIN), false);
 });
 
 test("concurrent differing same-user input creates only the winning draft", async t => {
