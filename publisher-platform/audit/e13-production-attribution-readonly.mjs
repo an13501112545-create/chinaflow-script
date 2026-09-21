@@ -42,15 +42,31 @@ const allowedPragma =
 
 function assertReadOnlySql(sql) {
   const trimmed = sql.trim();
+  const withoutTrailingSemicolon = trimmed.endsWith(";")
+    ? trimmed.slice(0, -1).trimEnd()
+    : trimmed;
+
   assert.ok(
-    /^SELECT\b/i.test(trimmed) || allowedPragma.test(trimmed),
+    /^SELECT\b/i.test(withoutTrailingSemicolon) ||
+      allowedPragma.test(withoutTrailingSemicolon),
     "Non-read-only SQL rejected"
   );
+
   assert.ok(
-    !/\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP|VACUUM|REINDEX|ATTACH|DETACH)\b/i.test(trimmed),
-    "Mutation or DDL token rejected"
+    !withoutTrailingSemicolon.includes(";"),
+    "Multiple SQL statements rejected"
   );
 }
+
+assertReadOnlySql("SELECT replace('a','a','b') AS value");
+assert.throws(
+  () => assertReadOnlySql("UPDATE events SET event_type='x'"),
+  /Non-read-only SQL rejected/
+);
+assert.throws(
+  () => assertReadOnlySql("SELECT 1; DELETE FROM events"),
+  /Multiple SQL statements rejected/
+);
 
 function d1(sql) {
   assertReadOnlySql(sql);
