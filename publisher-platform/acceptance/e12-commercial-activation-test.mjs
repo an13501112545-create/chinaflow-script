@@ -198,8 +198,26 @@ if (process.platform !== "win32") {
 }
 
 async function call(base, route, init = {}) {
-  return fetch(base + route, { redirect: "manual", ...init });
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await fetch(base + route, { redirect: "manual", ...init });
+    } catch (error) {
+      lastError = error;
+      if (attempt === 3) throw error;
+      await new Promise(resolve => setTimeout(resolve, attempt * 500));
+    }
+  }
+  throw lastError;
 }
+async function readinessCall(base, route, init = {}) {
+  try {
+    return await call(base, route, init);
+  } catch {
+    return null;
+  }
+}
+
 async function waitForActivationApi() {
   let healthStatus = null;
   let patchStatus = null;
@@ -207,20 +225,28 @@ async function waitForActivationApi() {
   let authenticatedInvalidStatus = null;
 
   for (let attempt = 1; attempt <= 80; attempt += 1) {
-    const health = await call(ACTIVATION, "/health", { method: "GET" });
+    const health = await readinessCall(ACTIVATION, "/health", { method: "GET" });
+    if (!health) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      continue;
+    }
     healthStatus = health.status;
     await health.arrayBuffer();
 
-    const patch = await call(
+    const patch = await readinessCall(
       ACTIVATION,
       "/api/internal/commercial-activation",
       { method: "PATCH" }
     );
+    if (!patch) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      continue;
+    }
     patchStatus = patch.status;
     patchAllow = patch.headers.get("allow");
     await patch.arrayBuffer();
 
-    const invalid = await call(
+    const invalid = await readinessCall(
       ACTIVATION,
       "/api/internal/commercial-activation",
       {
@@ -232,6 +258,10 @@ async function waitForActivationApi() {
         body: "{}"
       }
     );
+    if (!invalid) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      continue;
+    }
     authenticatedInvalidStatus = invalid.status;
     await invalid.arrayBuffer();
 
@@ -257,7 +287,11 @@ async function waitForActivationApi() {
 async function waitForPublisherApp() {
   let lastStatus = null;
   for (let attempt = 1; attempt <= 80; attempt += 1) {
-    const response = await call(APP, "/health", { method: "GET" });
+    const response = await readinessCall(APP, "/health", { method: "GET" });
+    if (!response) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      continue;
+    }
     lastStatus = response.status;
     await response.arrayBuffer();
     if (lastStatus === 200) return;
@@ -269,7 +303,11 @@ async function waitForPublisherApp() {
 async function waitForConfigApi() {
   let lastStatus = null;
   for (let attempt = 1; attempt <= 80; attempt += 1) {
-    const response = await call(CONFIG_API, "/v1/config", { method: "GET" });
+    const response = await readinessCall(CONFIG_API, "/v1/config", { method: "GET" });
+    if (!response) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      continue;
+    }
     lastStatus = response.status;
     await response.arrayBuffer();
     if (lastStatus === 400) return;
