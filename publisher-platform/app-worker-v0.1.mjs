@@ -318,9 +318,37 @@ a{color:#0b7285}
     }
 
     if (accountStatus === "pending_review" && reviewStatus === "approved") {
+      const provisioningStatus =
+        currentDraft?.supplier_site?.provisioning_status ?? null;
+
+      if (provisioningStatus === "active") {
+        submissionHeading.textContent = "Supplier provisioning complete";
+        submissionStatus.textContent =
+          "Your supplier connection is ready. Account activation is the next step.";
+        show(submitted);
+        return;
+      }
+
+      if (provisioningStatus === "pending") {
+        submissionHeading.textContent = "Supplier provisioning";
+        submissionStatus.textContent =
+          "Your publisher profile has been approved. Supplier provisioning is in progress.";
+        show(submitted);
+        return;
+      }
+
+      if (provisioningStatus === "failed" ||
+          provisioningStatus === "disabled") {
+        submissionHeading.textContent = "Supplier provisioning needs attention";
+        submissionStatus.textContent =
+          "Your publisher profile is approved, but supplier provisioning needs review by ChinaFlow.";
+        show(submitted);
+        return;
+      }
+
       submissionHeading.textContent = "Review approved";
       submissionStatus.textContent =
-        "Your publisher profile has been approved. Supplier provisioning is in progress.";
+        "Your publisher profile has been approved. Supplier provisioning will begin next.";
       show(submitted);
       return;
     }

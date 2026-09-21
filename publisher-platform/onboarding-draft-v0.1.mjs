@@ -55,10 +55,15 @@ async function readAuthorizedDraft(database, session, includePendingReview = fal
   const row = await database.prepare(`
     SELECT p.publisher_id, p.slug, p.display_name, p.account_status, p.install_public_key,
       d.hostname, d.install_status, d.verification_status, d.review_status,
-      d.monetization_status, d.reviewed_at
+      d.monetization_status, d.reviewed_at,
+      s.supplier_site_id, s.supplier, s.provisioning_status, s.provisioned_at
     FROM publisher_memberships m
     JOIN publishers p ON p.publisher_id = m.publisher_id
     JOIN publisher_domains d ON d.publisher_id = p.publisher_id AND d.is_primary = 1
+    LEFT JOIN publisher_supplier_sites s
+      ON s.publisher_id = p.publisher_id
+     AND s.domain_id = d.domain_id
+     AND s.supplier = 'trip.com'
     WHERE m.user_id = ? AND m.membership_status = 'active' AND (p.account_status = 'draft' ${includePendingReview ? "OR p.account_status IN ('pending_review', 'rejected')" : ""})
       AND EXISTS (${ELIGIBLE_SESSION})
     ORDER BY m.created_at, m.membership_id LIMIT 1
@@ -70,7 +75,15 @@ async function readAuthorizedDraft(database, session, includePendingReview = fal
       install_public_key: row.install_public_key },
     primary_domain: { hostname: row.hostname, install_status: row.install_status,
       verification_status: row.verification_status, review_status: row.review_status,
-      monetization_status: row.monetization_status, reviewed_at: row.reviewed_at }
+      monetization_status: row.monetization_status, reviewed_at: row.reviewed_at },
+    ...(row.supplier_site_id ? {
+      supplier_site: {
+        supplier_site_id: row.supplier_site_id,
+        supplier: row.supplier,
+        provisioning_status: row.provisioning_status,
+        provisioned_at: row.provisioned_at
+      }
+    } : {})
   };
 }
 

@@ -90,7 +90,8 @@ async function page(
   accountStatus = "draft",
   installStatus = "pending",
   verificationStatus = "unverified",
-  reviewStatus = "pending"
+  reviewStatus = "pending",
+  provisioningStatus = null
 ) {
   const response = await worker.fetch(new Request(env.APP_ORIGIN + "/onboarding"), env);
   const html = await response.text();
@@ -120,7 +121,17 @@ async function page(
         review_status: reviewStatus,
         monetization_status: "disabled",
         reviewed_at: reviewStatus === "pending" ? null : "2026-09-21 00:00:00"
-      }
+      },
+      ...(provisioningStatus ? {
+        supplier_site: {
+          supplier_site_id: "site-test",
+          supplier: "trip.com",
+          provisioning_status: provisioningStatus,
+          provisioned_at: provisioningStatus === "active"
+            ? "2026-09-21 01:00:00"
+            : null
+        }
+      } : {})
     } };
     if (url.endsWith("/terms")) body = { terms: { terms_version: "chinaflow-publisher-terms-v1", accepted: true } };
     if (url.endsWith("/verify-install")) body = { verification: {
@@ -174,7 +185,7 @@ test("pending review refresh shows stable submitted state without loading draft-
   assert.equal(p.calls.some(c => c.url.endsWith("/terms")), false);
 });
 
-test("approved review refresh shows provisioning state", async t => {
+test("approved review without supplier site shows provisioning not started", async t => {
   const p = await page(
     t,
     "pending_review",
@@ -184,10 +195,51 @@ test("approved review refresh shows provisioning state", async t => {
   );
   assert.equal(p.visible("submitted"), true);
   assert.match(p.element("submission-heading").textContent, /review approved/i);
-  assert.match(p.element("submission-status").textContent, /provisioning/i);
+  assert.match(p.element("submission-status").textContent, /will begin next/i);
   for (const id of ["create", "terms", "install"]) assert.equal(p.visible(id), false);
   assert.equal(p.calls.some(c => c.url.endsWith("/terms")), false);
 });
+
+test("pending supplier provisioning refresh shows in-progress state", async t => {
+  const p = await page(
+    t,
+    "pending_review",
+    "detected",
+    "verified",
+    "approved",
+    "pending"
+  );
+  assert.match(p.element("submission-heading").textContent, /supplier provisioning/i);
+  assert.match(p.element("submission-status").textContent, /in progress/i);
+});
+
+test("active supplier provisioning refresh shows completion state", async t => {
+  const p = await page(
+    t,
+    "pending_review",
+    "detected",
+    "verified",
+    "approved",
+    "active"
+  );
+  assert.match(p.element("submission-heading").textContent, /provisioning complete/i);
+  assert.match(p.element("submission-status").textContent, /activation is the next step/i);
+});
+
+for (const provisioningStatus of ["failed", "disabled"]) {
+  test(`${provisioningStatus} supplier provisioning refresh shows attention state`, async t => {
+    const p = await page(
+      t,
+      "pending_review",
+      "detected",
+      "verified",
+      "approved",
+      provisioningStatus
+    );
+    assert.match(p.element("submission-heading").textContent, /needs attention/i);
+    assert.match(p.element("submission-status").textContent, /needs review/i);
+  });
+}
 
 test("rejected review refresh never falls back to create publisher", async t => {
   const p = await page(

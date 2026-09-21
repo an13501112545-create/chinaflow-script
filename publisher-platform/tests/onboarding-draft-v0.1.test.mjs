@@ -564,3 +564,67 @@ test("GET resumes approved and rejected review outcomes without allowing recreat
   assert.equal((await f.request()).status, 409);
   assert.deepEqual(f.counts(), [1, 1, 1]);
 });
+
+
+test("GET exposes supplier provisioning lifecycle without supplier credentials", async t => {
+  const f = await fixture(t);
+  const created = await f.request();
+  const publisherId = created.body.draft.publisher.publisher_id;
+  const domain = f.sqlite.prepare(
+    "SELECT domain_id FROM publisher_domains WHERE publisher_id=? AND is_primary=1"
+  ).get(publisherId);
+
+  f.sqlite.exec(`
+    UPDATE publishers SET account_status='pending_review';
+    UPDATE publisher_domains
+      SET install_status='detected',
+          verification_status='verified',
+          review_status='approved',
+          reviewed_at=CURRENT_TIMESTAMP;
+  `);
+
+  f.sqlite.prepare(`
+    INSERT INTO publisher_supplier_sites (
+      supplier_site_id,publisher_id,domain_id,supplier,provisioning_status
+    ) VALUES ('site-test',?,?,'trip.com','pending')
+  `).run(publisherId, domain.domain_id);
+
+  let result = await f.request({ method: "GET" });
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.draft.supplier_site, {
+    supplier_site_id: "site-test",
+    supplier: "trip.com",
+    provisioning_status: "pending",
+    provisioned_at: null
+  });
+  for (const secretField of ["aid", "sid", "sid_name"]) {
+    assert.equal(
+      Object.hasOwn(result.body.draft.supplier_site, secretField),
+      false
+    );
+  }
+
+  f.sqlite.exec(`
+    UPDATE publisher_supplier_sites
+    SET aid='10021103',
+        sid='330739613',
+        sid_name='internal-only',
+        provisioning_status='active',
+        provisioned_at=CURRENT_TIMESTAMP
+    WHERE supplier_site_id='site-test'
+  `);
+
+  result = await f.request({ method: "GET" });
+  assert.equal(result.status, 200);
+  assert.equal(
+    result.body.draft.supplier_site.provisioning_status,
+    "active"
+  );
+  assert.ok(result.body.draft.supplier_site.provisioned_at);
+  for (const secretField of ["aid", "sid", "sid_name"]) {
+    assert.equal(
+      Object.hasOwn(result.body.draft.supplier_site, secretField),
+      false
+    );
+  }
+});
