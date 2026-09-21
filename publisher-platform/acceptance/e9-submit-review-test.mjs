@@ -136,6 +136,28 @@ async function call(path, init = {}) {
   });
 }
 
+async function waitForLiveSubmitRoute() {
+  let lastStatus = null;
+  let lastAllow = null;
+  for (let attempt = 1; attempt <= 60; attempt += 1) {
+    const response = await call(
+      "/api/onboarding/submit",
+      { method: "PATCH" }
+    );
+    lastStatus = response.status;
+    lastAllow = response.headers.get("allow");
+    await response.arrayBuffer();
+    if (lastStatus === 405 && lastAllow === "POST") return;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error(
+    "TEST Worker route did not become ready after deploy: " +
+      "status=" + lastStatus + ", allow=" + lastAllow
+  );
+}
+
+await waitForLiveSubmitRoute();
+
 for (const method of [
   "GET", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS"
 ]) {
