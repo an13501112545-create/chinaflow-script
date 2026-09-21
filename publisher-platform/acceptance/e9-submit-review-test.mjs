@@ -73,9 +73,9 @@ assert.ok(
 );
 
 const branch = run("git", ["status", "-sb"]).trim();
-assert.match(
+assert.equal(
   branch,
-  /^## main\.\.\.origin\/main$/m,
+  "## main...origin/main",
   "Git must be clean and synchronized with origin/main"
 );
 const head = run("git", ["rev-parse", "HEAD"]).trim();
