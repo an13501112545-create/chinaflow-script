@@ -437,12 +437,14 @@ test("two tenants read only their own explicitly joined draft", async t => {
   }
 });
 
-test("existing non-draft membership blocks creation", async t => {
+test("existing active membership blocks recreation but remains readable", async t => {
   const f = await fixture(t);
   await f.request();
   f.sqlite.exec("UPDATE publishers SET account_status = 'active'");
   assert.equal((await f.request()).status, 409);
-  assert.equal((await f.request({ method: 'GET' })).status, 404);
+  const resumed = await f.request({ method: "GET" });
+  assert.equal(resumed.status, 200);
+  assert.equal(resumed.body.draft.publisher.account_status, "active");
   assert.deepEqual(f.counts(), [1, 1, 1]);
 });
 
@@ -627,4 +629,59 @@ test("GET exposes supplier provisioning lifecycle without supplier credentials",
       false
     );
   }
+});
+
+
+test("GET resumes final active state without exposing commercial URLs", async t => {
+  const f = await fixture(t);
+  const created = await f.request();
+  const publisherId = created.body.draft.publisher.publisher_id;
+  const domain = f.sqlite.prepare(
+    "SELECT domain_id FROM publisher_domains WHERE publisher_id=? AND is_primary=1"
+  ).get(publisherId);
+
+  f.sqlite.exec(`
+    UPDATE publishers SET account_status='active';
+    UPDATE publisher_domains
+      SET install_status='detected',
+          verification_status='verified',
+          review_status='approved',
+          monetization_status='enabled',
+          reviewed_at=CURRENT_TIMESTAMP;
+  `);
+
+  f.sqlite.prepare(`
+    INSERT INTO publisher_supplier_sites (
+      supplier_site_id,publisher_id,domain_id,supplier,
+      aid,sid,sid_name,provisioning_status,provisioned_at
+    ) VALUES (
+      'site-active',?,?,'trip.com',
+      '10021103','330739613','internal-only','active',CURRENT_TIMESTAMP
+    )
+  `).run(publisherId, domain.domain_id);
+
+  const result = await f.request({ method: "GET" });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.draft.publisher.account_status, "active");
+  assert.equal(
+    result.body.draft.primary_domain.monetization_status,
+    "enabled"
+  );
+  assert.equal(
+    result.body.draft.supplier_site.provisioning_status,
+    "active"
+  );
+
+  const serialized = JSON.stringify(result.body);
+  for (const forbidden of [
+    "10021103",
+    "330739613",
+    "internal-only",
+    "affiliate_url",
+    "trip_sub1"
+  ]) {
+    assert.equal(serialized.includes(forbidden), false);
+  }
+
+  assert.equal((await f.request()).status, 409);
 });

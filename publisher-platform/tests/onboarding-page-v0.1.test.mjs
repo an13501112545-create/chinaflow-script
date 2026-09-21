@@ -91,7 +91,8 @@ async function page(
   installStatus = "pending",
   verificationStatus = "unverified",
   reviewStatus = "pending",
-  provisioningStatus = null
+  provisioningStatus = null,
+  monetizationStatus = "disabled"
 ) {
   const response = await worker.fetch(new Request(env.APP_ORIGIN + "/onboarding"), env);
   const html = await response.text();
@@ -119,7 +120,7 @@ async function page(
         install_status: installStatus,
         verification_status: verificationStatus,
         review_status: reviewStatus,
-        monetization_status: "disabled",
+        monetization_status: monetizationStatus,
         reviewed_at: reviewStatus === "pending" ? null : "2026-09-21 00:00:00"
       },
       ...(provisioningStatus ? {
@@ -224,6 +225,26 @@ test("active supplier provisioning refresh shows completion state", async t => {
   );
   assert.match(p.element("submission-heading").textContent, /provisioning complete/i);
   assert.match(p.element("submission-status").textContent, /activation is the next step/i);
+});
+
+
+test("active publisher refresh shows final active state", async t => {
+  const p = await page(
+    t,
+    "active",
+    "detected",
+    "verified",
+    "approved",
+    "active",
+    "enabled"
+  );
+  assert.equal(p.visible("submitted"), true);
+  assert.match(p.element("submission-heading").textContent, /chinaflow is active/i);
+  assert.match(p.element("submission-status").textContent, /monetization is enabled/i);
+  for (const id of ["create", "terms", "install"]) {
+    assert.equal(p.visible(id), false);
+  }
+  assert.equal(p.calls.some(c => c.url.endsWith("/terms")), false);
 });
 
 for (const provisioningStatus of ["failed", "disabled"]) {

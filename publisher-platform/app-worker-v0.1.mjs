@@ -309,6 +309,18 @@ a{color:#0b7285}
     const accountStatus = currentDraft?.publisher?.account_status;
     const reviewStatus = currentDraft?.primary_domain?.review_status;
 
+    if (
+      accountStatus === "active" &&
+      currentDraft?.primary_domain?.monetization_status === "enabled" &&
+      currentDraft?.supplier_site?.provisioning_status === "active"
+    ) {
+      submissionHeading.textContent = "ChinaFlow is active";
+      submissionStatus.textContent =
+        "Your publisher account is active and monetization is enabled.";
+      show(submitted);
+      return;
+    }
+
     if (accountStatus === "rejected" || reviewStatus === "rejected") {
       submissionHeading.textContent = "Application not approved";
       submissionStatus.textContent =
@@ -442,7 +454,8 @@ a{color:#0b7285}
     currentDraft = body.draft;
 
     if (currentDraft?.publisher?.account_status === "pending_review" ||
-        currentDraft?.publisher?.account_status === "rejected") {
+        currentDraft?.publisher?.account_status === "rejected" ||
+        currentDraft?.publisher?.account_status === "active") {
       showReviewState();
       return;
     }

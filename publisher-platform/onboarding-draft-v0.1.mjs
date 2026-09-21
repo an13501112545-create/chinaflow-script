@@ -64,7 +64,7 @@ async function readAuthorizedDraft(database, session, includePendingReview = fal
       ON s.publisher_id = p.publisher_id
      AND s.domain_id = d.domain_id
      AND s.supplier = 'trip.com'
-    WHERE m.user_id = ? AND m.membership_status = 'active' AND (p.account_status = 'draft' ${includePendingReview ? "OR p.account_status IN ('pending_review', 'rejected')" : ""})
+    WHERE m.user_id = ? AND m.membership_status = 'active' AND (p.account_status = 'draft' ${includePendingReview ? "OR p.account_status IN ('pending_review', 'rejected', 'active')" : ""})
       AND EXISTS (${ELIGIBLE_SESSION})
     ORDER BY m.created_at, m.membership_id LIMIT 1
   `).bind(session.userId, session.sessionId, session.userId).first();
