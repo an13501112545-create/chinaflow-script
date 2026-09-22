@@ -18,6 +18,7 @@
     "APP_ENVIRONMENT": "production",
     "APP_ORIGIN": "https://chinaflow-publisher-app-v0-1.an13501112545.workers.dev",
     "CHINAFLOW_AUTH_ORIGIN": "https://chinaflow-auth-api-v0-1.an13501112545.workers.dev",
-    "CHINAFLOW_RUNTIME_ORIGIN": "https://chinaflow-config-api-v0-1.an13501112545.workers.dev"
+    "CHINAFLOW_RUNTIME_ORIGIN": "https://chinaflow-config-api-v0-1.an13501112545.workers.dev",
+    "TURNSTILE_SITE_KEY": "__CHINAFLOW_TURNSTILE_SITE_KEY_REQUIRED_BEFORE_DEPLOY__"
   }
 }

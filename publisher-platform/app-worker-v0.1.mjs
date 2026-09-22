@@ -104,6 +104,51 @@ const LOGOUT_ROUTE = "/api/auth/logout";
 const PUBLISHER_TERMS_ROUTE = "/legal/chinaflow-publisher-terms-v1";
 const ONBOARDING_ROUTE = "/onboarding";
 const VERIFY_INSTALL_ROUTE = "/api/onboarding/verify-install";
+const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
+const TURNSTILE_ACTION = "publisher_magic_link";
+const TURNSTILE_SITE_KEY_PLACEHOLDER =
+  "__CHINAFLOW_TURNSTILE_SITE_KEY_REQUIRED_BEFORE_DEPLOY__";
+
+function readTurnstileSiteKey(env) {
+  const value = env?.TURNSTILE_SITE_KEY;
+
+  if (
+    value === undefined ||
+    value === null ||
+    value === ""
+  ) {
+    if (env?.APP_ENVIRONMENT === "production") {
+      throw new Error(
+        "TURNSTILE_SITE_KEY binding unavailable"
+      );
+    }
+
+    return null;
+  }
+
+  if (
+    typeof value !== "string" ||
+    value.length < 3 ||
+    value.length > 256 ||
+    value.trim() !== value ||
+    /[\s\x00-\x1f\x7f<>"']/u.test(value)
+  ) {
+    throw new Error(
+      "TURNSTILE_SITE_KEY binding invalid"
+    );
+  }
+
+  if (
+    env?.APP_ENVIRONMENT === "production" &&
+    value === TURNSTILE_SITE_KEY_PLACEHOLDER
+  ) {
+    throw new Error(
+      "TURNSTILE_SITE_KEY production value not configured"
+    );
+  }
+
+  return value;
+}
 
 function json(status, body, extraHeaders = {}) {
   const headers = new Headers({
@@ -121,8 +166,15 @@ function json(status, body, extraHeaders = {}) {
   return new Response(JSON.stringify(body), { status, headers });
 }
 
-function html(status, body, connectOrigin = null) {
+function html(
+  status,
+  body,
+  connectOrigin = null,
+  turnstileOrigin = null
+) {
   let connectSrc = "'self'";
+  let scriptSrc = "'unsafe-inline'";
+  let frameSrc = "'none'";
 
   if (connectOrigin !== null) {
     let parsed;
@@ -130,7 +182,9 @@ function html(status, body, connectOrigin = null) {
     try {
       parsed = new URL(connectOrigin);
     } catch {
-      throw new Error("HTML connect origin is invalid");
+      throw new Error(
+        "HTML connect origin is invalid"
+      );
     }
 
     if (
@@ -142,21 +196,61 @@ function html(status, body, connectOrigin = null) {
       parsed.hash !== "" ||
       parsed.origin !== connectOrigin
     ) {
-      throw new Error("HTML connect origin is invalid");
+      throw new Error(
+        "HTML connect origin is invalid"
+      );
     }
 
     connectSrc += " " + connectOrigin;
   }
 
+  if (turnstileOrigin !== null) {
+    let parsed;
+
+    try {
+      parsed = new URL(turnstileOrigin);
+    } catch {
+      throw new Error(
+        "HTML Turnstile origin is invalid"
+      );
+    }
+
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username !== "" ||
+      parsed.password !== "" ||
+      parsed.pathname !== "/" ||
+      parsed.search !== "" ||
+      parsed.hash !== "" ||
+      parsed.origin !== turnstileOrigin
+    ) {
+      throw new Error(
+        "HTML Turnstile origin is invalid"
+      );
+    }
+
+    scriptSrc += " " + turnstileOrigin;
+    frameSrc = turnstileOrigin;
+  }
+
   return new Response(body, {
     status,
     headers: {
-      "Content-Type": "text/html; charset=utf-8",
+      "Content-Type":
+        "text/html; charset=utf-8",
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "DENY",
       "Referrer-Policy": "no-referrer",
-      "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src " + connectSrc + "; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+      "Content-Security-Policy":
+        "default-src 'none'; script-src " +
+        scriptSrc +
+        "; style-src 'unsafe-inline'; connect-src " +
+        connectSrc +
+        "; frame-src " +
+        frameSrc +
+        "; base-uri 'none'; form-action 'none'; " +
+        "frame-ancestors 'none'"
     }
   });
 }
@@ -783,6 +877,8 @@ a{color:#0b7285}
     }
 
     const authOrigin = requireAuthOrigin(env);
+    const turnstileSiteKey =
+      readTurnstileSiteKey(env);
 
     return html(200, `<!doctype html>
 <html lang="en">
@@ -799,7 +895,11 @@ button:disabled{opacity:.55;cursor:default}
 form{margin-top:18px}
 input{box-sizing:border-box;width:100%;padding:12px 14px;border:1px solid #cbd5e1;border-radius:8px;font-size:16px}
 #status{margin-top:18px}
+#turnstile-widget{margin-top:16px}
 </style>
+${turnstileSiteKey
+  ? `<script src="${TURNSTILE_ORIGIN}/turnstile/v0/api.js" async defer></script>`
+  : ""}
 </head>
 <body>
 <h1>Sign in to ChinaFlow</h1>
@@ -807,6 +907,9 @@ input{box-sizing:border-box;width:100%;padding:12px 14px;border:1px solid #cbd5e
 <form id="request-link" hidden>
   <label for="email">Email address</label>
   <input id="email" type="email" autocomplete="email" required>
+  ${turnstileSiteKey
+    ? `<div id="turnstile-widget" class="cf-turnstile" data-sitekey="${turnstileSiteKey}" data-action="${TURNSTILE_ACTION}"></div>`
+    : ""}
   <button id="send-link" type="submit">Email me a sign-in link</button>
 </form>
 <button id="continue" hidden>Continue sign in</button>
@@ -814,7 +917,10 @@ input{box-sizing:border-box;width:100%;padding:12px 14px;border:1px solid #cbd5e
 <script>
 (() => {
   const authOrigin = ${JSON.stringify(authOrigin)};
-  const params = new URLSearchParams(location.search);
+  const turnstileSiteKey =
+    ${JSON.stringify(turnstileSiteKey)};
+  const params =
+    new URLSearchParams(location.search);
   const token = params.get("token");
   const button = document.getElementById("continue");
   const form = document.getElementById("request-link");
@@ -829,11 +935,39 @@ input{box-sizing:border-box;width:100%;padding:12px 14px;border:1px solid #cbd5e
     status.textContent = "Sending sign-in link…";
 
     try {
-      const response = await fetch(authOrigin + "/v1/auth/magic-link", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({email: email.value})
-      });
+      const payload = {
+        email: email.value
+      };
+
+      if (turnstileSiteKey) {
+        const tokenInput =
+          document.querySelector(
+            '[name="cf-turnstile-response"]'
+          );
+
+        const turnstileToken =
+          tokenInput?.value?.trim();
+
+        if (!turnstileToken) {
+          status.textContent =
+            "Please complete the security check.";
+          return;
+        }
+
+        payload.turnstile_token =
+          turnstileToken;
+      }
+
+      const response = await fetch(
+        authOrigin + "/v1/auth/magic-link",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        }
+      );
 
       if (!response.ok) {
         status.textContent = "Unable to send a sign-in link. Please check your email address.";
@@ -844,6 +978,14 @@ input{box-sizing:border-box;width:100%;padding:12px 14px;border:1px solid #cbd5e
     } catch {
       status.textContent = "Unable to send a sign-in link. Please try again.";
     } finally {
+      if (
+        turnstileSiteKey &&
+        window.turnstile &&
+        typeof window.turnstile.reset === "function"
+      ) {
+        window.turnstile.reset();
+      }
+
       sendLink.disabled = false;
     }
   });
@@ -904,7 +1046,12 @@ input{box-sizing:border-box;width:100%;padding:12px 14px;border:1px solid #cbd5e
 })();
 </script>
 </body>
-</html>`, authOrigin);
+</html>`,
+      authOrigin,
+      turnstileSiteKey
+        ? TURNSTILE_ORIGIN
+        : null
+    );
   }
 
   if (url.pathname === CONSUME_ROUTE) {

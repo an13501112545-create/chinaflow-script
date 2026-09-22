@@ -5,6 +5,9 @@ import { completeMagicLinkLogin } from "./auth-login-service-v0.1.mjs";
 
 const MAGIC_LINK_ROUTE = "/v1/auth/magic-link";
 const CONSUME_ROUTE = "/v1/auth/consume";
+const TURNSTILE_VERIFY_URL =
+  "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+const TURNSTILE_ACTION = "publisher_magic_link";
 function requireAppOrigin(env) {
   const value = env?.APP_ORIGIN;
 
@@ -54,6 +57,96 @@ function response(status, body = null, origin = null) {
   return new Response(
     body === null ? null : JSON.stringify(body),
     { status, headers }
+  );
+}
+
+function normalizeTurnstileToken(value) {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > 2048 ||
+    value.trim() !== value ||
+    /[\s\x00-\x1f\x7f]/u.test(value)
+  ) {
+    return null;
+  }
+
+  return value;
+}
+
+function requireTurnstileSecret(env) {
+  const value = env?.TURNSTILE_SECRET_KEY;
+
+  if (
+    typeof value !== "string" ||
+    value.length < 8 ||
+    value.length > 512 ||
+    value.trim() !== value ||
+    /[\x00-\x20\x7f]/u.test(value)
+  ) {
+    throw new Error(
+      "TURNSTILE_SECRET_KEY binding unavailable or invalid"
+    );
+  }
+
+  return value;
+}
+
+async function verifyTurnstile({
+  secret,
+  token,
+  remoteIp,
+  appOrigin,
+  allowTestingKey = false
+}) {
+  const body = new URLSearchParams();
+  body.set("secret", secret);
+  body.set("response", token);
+
+  if (
+    typeof remoteIp === "string" &&
+    remoteIp !== "unknown" &&
+    remoteIp.length <= 64 &&
+    !/[\s\x00-\x1f\x7f]/u.test(remoteIp)
+  ) {
+    body.set("remoteip", remoteIp);
+  }
+
+  const response = await fetch(
+    TURNSTILE_VERIFY_URL,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/x-www-form-urlencoded"
+      },
+      body,
+      signal: AbortSignal.timeout(5000)
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Turnstile Siteverify unavailable");
+  }
+
+  const result = await response.json();
+
+  if (result?.success !== true) {
+    return false;
+  }
+
+  if (
+    result?.metadata?.result_with_testing_key === true
+  ) {
+    return allowTestingKey === true;
+  }
+
+  const expectedHostname =
+    new URL(appOrigin).hostname.toLowerCase();
+
+  return (
+    result?.hostname?.toLowerCase() === expectedHostname &&
+    result?.action === TURNSTILE_ACTION
   );
 }
 
@@ -139,6 +232,23 @@ export async function handleAuthRequest(request, env) {
     return response(400, { error: "invalid_email" }, allowedOrigin);
   }
 
+  const turnstileRequired =
+    env?.AUTH_ENVIRONMENT === "production" ||
+    env?.TURNSTILE_REQUIRED === "true";
+
+  const turnstileToken =
+    turnstileRequired
+      ? normalizeTurnstileToken(body?.turnstile_token)
+      : null;
+
+  if (turnstileRequired && !turnstileToken) {
+    return response(
+      400,
+      { error: "turnstile_required" },
+      allowedOrigin
+    );
+  }
+
   if (env?.AUTH_ENVIRONMENT !== "production") {
     const testEmail = normalizeEmail(env?.AUTH_TEST_EMAIL);
 
@@ -165,6 +275,27 @@ export async function handleAuthRequest(request, env) {
 
   if (!emailAllowed) {
     return response(202, { ok: true }, allowedOrigin);
+  }
+
+  if (turnstileRequired) {
+    const turnstilePassed =
+      await verifyTurnstile({
+        secret: requireTurnstileSecret(env),
+        token: turnstileToken,
+        remoteIp: clientIp,
+        appOrigin,
+        allowTestingKey:
+          env?.AUTH_ENVIRONMENT === "test" &&
+          env?.TURNSTILE_REQUIRED === "true"
+      });
+
+    if (!turnstilePassed) {
+      return response(
+        403,
+        { error: "turnstile_failed" },
+        allowedOrigin
+      );
+    }
   }
 
   const db = env?.CHINAFLOW_EVENTS;

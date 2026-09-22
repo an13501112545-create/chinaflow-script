@@ -16,7 +16,10 @@
     "APP_ORIGIN": "https://chinaflow-publisher-app-v0-1.an13501112545.workers.dev"
   },
   "secrets": {
-    "required": ["RESEND_API_KEY"]
+    "required": [
+      "RESEND_API_KEY",
+      "TURNSTILE_SECRET_KEY"
+    ]
   },
   "ratelimits": [
     {

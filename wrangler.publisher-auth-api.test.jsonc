@@ -14,7 +14,8 @@
   "vars": {
     "AUTH_ENVIRONMENT": "test",
     "AUTH_TEST_EMAIL": "an13501112545@gmail.com",
-    "APP_ORIGIN": "https://chinaflow-publisher-app-v0-1-test.an13501112545.workers.dev"
+    "APP_ORIGIN": "https://chinaflow-publisher-app-v0-1-test.an13501112545.workers.dev",
+    "TURNSTILE_REQUIRED": "true"
   },
   "ratelimits": [
     {
@@ -33,5 +34,10 @@
         "period": 60
       }
     }
-  ]
+  ],
+  "secrets": {
+    "required": [
+      "TURNSTILE_SECRET_KEY"
+    ]
+  }
 }
