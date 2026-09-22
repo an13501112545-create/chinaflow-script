@@ -10,6 +10,81 @@ import * as installVerification from "../onboarding-install-verification-v0.1.mj
 const APP_ORIGIN = "https://publisher.example.test";
 const VERIFY_PATH = "/api/onboarding/verify-install";
 
+test("second verified hostname claim returns exact conflict and preserves both tenants", async t => {
+  const f = await verificationFixture(t);
+  for (const n of [1, 2]) {
+    f.sqlite.prepare(`INSERT INTO publishers
+      (publisher_id,slug,display_name,terms_version,terms_accepted_at,terms_accepted_by_user_id,install_public_key)
+      VALUES (?,?,?,'chinaflow-publisher-terms-v1',CURRENT_TIMESTAMP,?,?)`)
+      .run(`claim-${n}`, `claim-${n}`, `Claim ${n}`, `verify-user-${n}`, `cfi_${String(n).repeat(32)}`);
+    f.sqlite.prepare(`INSERT INTO publisher_domains (domain_id,publisher_id,hostname,is_primary)
+      VALUES (?,?,'shared.example.test',1)`).run(`claim-domain-${n}`, `claim-${n}`);
+    f.sqlite.prepare(`INSERT INTO publisher_memberships (membership_id,publisher_id,user_id,role,membership_status)
+      VALUES (?,?,?,'owner','active')`).run(`claim-member-${n}`, `claim-${n}`, `verify-user-${n}`);
+  }
+  const contexts = [];
+  for (const session of [f.session1, f.session2]) {
+    const authorization = await installVerification.authorizeInstallVerification(f.db, session.token);
+    assert.equal(authorization.status, 200);
+    contexts.push(authorization.context);
+  }
+  const domains = () => f.sqlite.prepare("SELECT * FROM publisher_domains ORDER BY domain_id").all();
+  const before = domains();
+  assert.deepEqual(before.map(row => row.verification_status), ["unverified", "unverified"]);
+  const record = installVerification.recordInstallVerificationResult;
+  assert.deepEqual(await record(f.db, contexts[0], { detected: true }), {
+    status: 200, body: { verification: {
+      detected: true, install_status: "detected", verification_status: "verified"
+    } }
+  });
+  const winner = domains()[0];
+  assert.deepEqual(await record(f.db, contexts[1], { detected: true }), {
+    status: 409, body: { error: "conflict" }
+  });
+  assert.deepEqual(domains(), [winner, before[1]]);
+  assert.deepEqual(domains().map(row => row.verification_status), ["verified", "unverified"]);
+  assert.deepEqual(f.sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+});
+
+test("verified UPDATE recognizes only exact hostname UNIQUE messages and causes", async () => {
+  const context = {
+    userId: "u", sessionId: "s", publisherId: "p", domainId: "d",
+    hostname: "shared.example.test", installPublicKey: `cfi_${"1".repeat(32)}`
+  };
+  const invoke = (error, detected = true) => installVerification.recordInstallVerificationResult({
+    prepare(sql) {
+      assert.match(sql, /UPDATE publisher_domains/);
+      return { bind() { return { async first() { throw error; } }; } };
+    }
+  }, context, detected ? { detected: true } : { detected: false, reason: "loader_not_found" });
+  const exact = "UNIQUE constraint failed: publisher_domains.hostname";
+  for (const suffix of ["", ": SQLITE_CONSTRAINT", ": SQLITE_CONSTRAINT_UNIQUE",
+    ": SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE)"]) {
+    for (const prefix of ["", "D1_ERROR: "]) {
+      for (const wrapped of [false, true]) {
+        const cause = new Error(prefix + exact + suffix);
+        const error = wrapped ? new Error("D1 query failed", { cause }) : cause;
+        assert.deepEqual(await invoke(error), { status: 409, body: { error: "conflict" } });
+        await assert.rejects(invoke(error, false), actual => actual === error);
+      }
+    }
+  }
+  for (const message of [
+    "database unavailable", "FOREIGN KEY constraint failed",
+    "UNIQUE constraint failed: publisher_domains.domain_id",
+    "UNIQUE constraint failed: publisher_domains.publisher_id",
+    "UNIQUE constraint failed: publishers.slug", exact + "_other",
+    exact + ", publisher_domains.publisher_id", exact + ": SQLITE_CONSTRAINT_PRIMARYKEY",
+    exact + ": unrelated error"
+  ]) {
+    for (const wrapped of [false, true]) {
+      const cause = new Error(message);
+      const error = wrapped ? new Error("D1 query failed", { cause }) : cause;
+      await assert.rejects(invoke(error), actual => actual === error);
+    }
+  }
+});
+
 const built = await build({
   entryPoints: [
     fileURLToPath(new URL("../app-worker-v0.1.mjs", import.meta.url))
@@ -126,10 +201,10 @@ async function verificationFixture(t) {
   );
 
   const files = readdirSync(migrations)
-    .filter(name => /^000[1-7]_.*\.sql$/.test(name))
+    .filter(name => /^000[1-8]_.*\.sql$/.test(name))
     .sort();
 
-  assert.equal(files.length, 7);
+  assert.equal(files.length, 8);
 
   for (const file of files) {
     sqlite.exec(

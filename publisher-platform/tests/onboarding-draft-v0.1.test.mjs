@@ -17,8 +17,8 @@ async function fixture(t) {
   t.after(() => sqlite.close());
   sqlite.exec("PRAGMA foreign_keys = ON");
   const migrations = new URL("../../collector/migrations/", import.meta.url);
-  const files = readdirSync(migrations).filter(name => /^000[1-7]_.*\.sql$/.test(name)).sort();
-  assert.equal(files.length, 7);
+  const files = readdirSync(migrations).filter(name => /^000[1-8]_.*\.sql$/.test(name)).sort();
+  assert.equal(files.length, 8);
   for (const file of files) sqlite.exec(readFileSync(new URL(file, migrations), "utf8"));
   assert.equal(sqlite.prepare("PRAGMA foreign_keys").get().foreign_keys, 1);
   sqlite.exec(`INSERT INTO publisher_users (user_id,email,email_normalized) VALUES
@@ -136,16 +136,23 @@ test("simultaneous same-user submissions create exactly one unit", async t => {
   assert.deepEqual(f.counts(), [1, 1, 1]);
 });
 
-test("different users race for canonical hostname: generic conflict and no orphans", async t => {
+test("different users can create unverified drafts for the same canonical hostname", async t => {
   const f = await fixture(t);
   const results = await Promise.all([
     f.request({ body: { ...input, hostname: "BÜCHER.Example." } }),
     f.request({ token: f.sessions[1].token, body: { ...input, hostname: "xn--bcher-kva.example" } })
   ]);
-  assert.deepEqual(results.map(r => r.status).sort(), [201, 409]);
-  assert.deepEqual(results.find(r => r.status === 409).body, { error: "conflict" });
-  assert.deepEqual(f.counts(), [1, 1, 1]);
-  assert.equal((await f.request({ token: f.sessions[results.findIndex(r => r.status === 409)].token, method: "GET" })).status, 404);
+  assert.deepEqual(results.map(r => r.status), [201, 201]);
+  assert.deepEqual(f.counts(), [2, 2, 2]);
+  assert.notEqual(results[0].body.draft.publisher.publisher_id, results[1].body.draft.publisher.publisher_id);
+  for (const [index, result] of results.entries()) {
+    assert.equal(result.body.draft.primary_domain.hostname, "xn--bcher-kva.example");
+    assert.equal(result.body.draft.primary_domain.verification_status, "unverified");
+    const own = await f.request({ token: f.sessions[index].token, method: "GET" });
+    assert.equal(own.status, 200);
+    assert.deepEqual(own.body, result.body);
+  }
+  assert.deepEqual(f.sqlite.prepare("PRAGMA foreign_key_check").all(), []);
 });
 
 for (const table of ["publishers", "publisher_memberships", "publisher_domains"]) {
@@ -462,7 +469,7 @@ test("concurrent differing same-user input creates only the winning draft", asyn
   assert.deepEqual(f.counts(), [1, 1, 1]);
 });
 
-test("schema enforces membership pair, global hostname and one primary per publisher", async t => {
+test("schema enforces membership pair, verified-only hostname uniqueness and one primary per publisher", async t => {
   const f = await fixture(t);
   await f.request();
   const id = f.sqlite.prepare("SELECT publisher_id FROM publishers").get().publisher_id;
@@ -472,10 +479,21 @@ test("schema enforces membership pair, global hostname and one primary per publi
   assert.throws(() => f.sqlite.prepare(`INSERT INTO publisher_domains
     (domain_id,publisher_id,hostname,is_primary) VALUES ('second',?,'second.example',1)`).run(id),
   /UNIQUE constraint failed: publisher_domains.publisher_id/);
-  assert.throws(() => f.sqlite.prepare(`INSERT INTO publisher_domains
-    (domain_id,publisher_id,hostname) VALUES ('duplicate',?,'travel.example.com')`).run(id),
-  /UNIQUE constraint failed: publisher_domains.hostname/);
-  assert.deepEqual(f.counts(), [1, 1, 1]);
+  f.sqlite.exec(`
+    INSERT INTO publishers (publisher_id,slug,display_name) VALUES ('other','other','Other');
+    INSERT INTO publisher_domains (domain_id,publisher_id,hostname)
+      VALUES ('duplicate','other','travel.example.com');
+  `);
+  assert.deepEqual(f.counts(), [2, 1, 2]);
+  assert.deepEqual(f.sqlite.prepare("SELECT verification_status FROM publisher_domains").all()
+    .map(row => row.verification_status), ["unverified", "unverified"]);
+  f.sqlite.prepare("UPDATE publisher_domains SET verification_status = 'verified' WHERE publisher_id = ?").run(id);
+  assert.throws(() => f.sqlite.exec("UPDATE publisher_domains SET verification_status = 'verified' WHERE domain_id = 'duplicate'"),
+    /UNIQUE constraint failed: publisher_domains.hostname/);
+  assert.equal(f.sqlite.prepare("SELECT verification_status FROM publisher_domains WHERE publisher_id = ?").get(id).verification_status, "verified");
+  assert.equal(f.sqlite.prepare("SELECT verification_status FROM publisher_domains WHERE domain_id = 'duplicate'").get().verification_status, "unverified");
+  assert.deepEqual(f.counts(), [2, 1, 2]);
+  assert.deepEqual(f.sqlite.prepare("PRAGMA foreign_key_check").all(), []);
 });
 
 test("two tenants read only their own explicitly joined draft", async t => {

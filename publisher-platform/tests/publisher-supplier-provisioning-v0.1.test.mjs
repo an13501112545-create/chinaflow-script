@@ -13,7 +13,7 @@ function fixture(t) {
 
   const migrations = new URL("../../collector/migrations/", import.meta.url);
   for (const file of readdirSync(migrations)
-    .filter(name => /^000[1-7]_.*\.sql$/.test(name)).sort()) {
+    .filter(name => /^000[1-8]_.*\.sql$/.test(name)).sort()) {
     sqlite.exec(readFileSync(new URL(file, migrations), "utf8"));
   }
 

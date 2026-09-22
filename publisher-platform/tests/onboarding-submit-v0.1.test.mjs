@@ -16,7 +16,7 @@ async function fixture(t) {
   });
   sqlite.exec("PRAGMA foreign_keys = ON");
   const migrations = new URL("../../collector/migrations/", import.meta.url);
-  for (const file of readdirSync(migrations).filter(n => /^000[1-7]_.*\.sql$/.test(n)).sort()) {
+  for (const file of readdirSync(migrations).filter(n => /^000[1-8]_.*\.sql$/.test(n)).sort()) {
     sqlite.exec(readFileSync(new URL(file, migrations), "utf8"));
   }
   sqlite.exec(`

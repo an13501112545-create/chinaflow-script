@@ -780,29 +780,42 @@ export async function recordInstallVerificationResult(
    * write boundary.
    */
   if (verifiedResult.detected) {
-    const row =
-      await database.prepare(`
-        UPDATE publisher_domains
-        SET
-          install_status = 'detected',
-          verification_status = 'verified',
-          first_seen_at =
-            COALESCE(
-              first_seen_at,
-              CURRENT_TIMESTAMP
-            ),
-          last_seen_at = CURRENT_TIMESTAMP,
-          verified_at = CURRENT_TIMESTAMP,
-          updated_at = CURRENT_TIMESTAMP
+    let row;
+    try {
+      row =
+        await database.prepare(`
+          UPDATE publisher_domains
+          SET
+            install_status = 'detected',
+            verification_status = 'verified',
+            first_seen_at =
+              COALESCE(
+                first_seen_at,
+                CURRENT_TIMESTAMP
+              ),
+            last_seen_at = CURRENT_TIMESTAMP,
+            verified_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
 
-        WHERE ${verificationEligibilitySql()}
+          WHERE ${verificationEligibilitySql()}
 
-        RETURNING
-          install_status,
-          verification_status
-      `).bind(
-        ...verificationBindings(context)
-      ).first();
+          RETURNING
+            install_status,
+            verification_status
+        `).bind(
+          ...verificationBindings(context)
+        ).first();
+    } catch (error) {
+      // Only this exact single-column UNIQUE violation is a hostname claim conflict.
+      const messages = [error?.message, error?.cause?.message];
+      if (messages.some(message =>
+        typeof message === "string" &&
+        /(?:^|: )UNIQUE constraint failed: publisher_domains\.hostname(?=$|: SQLITE_CONSTRAINT(?:_UNIQUE| \(extended: SQLITE_CONSTRAINT_UNIQUE\))?$)/.test(message)
+      )) {
+        return failure(409, "conflict");
+      }
+      throw error;
+    }
 
     if (!row) {
       return failure(

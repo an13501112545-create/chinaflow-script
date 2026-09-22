@@ -7,7 +7,7 @@ import { buildInstallConfigFromD1 } from '../config-reader-d1-v0.1.mjs';
 import { inert, origin } from './config-builder-install-v0.1.test.mjs';
 export const key = `cfi_${'a'.repeat(32)}`;
 export const migrations = readdirSync(new URL('../../collector/migrations/', import.meta.url))
-  .filter(n => /^000[1-7]_.*\.sql$/.test(n)).sort().map(n => readFileSync(new URL(`../../collector/migrations/${n}`, import.meta.url), 'utf8'));
+  .filter(n => /^000[1-8]_.*\.sql$/.test(n)).sort().map(n => readFileSync(new URL(`../../collector/migrations/${n}`, import.meta.url), 'utf8'));
 export const seed = `
 INSERT INTO publisher_users(user_id,email,email_normalized) VALUES ('u1','fixture@example.test','fixture@example.test');
 INSERT INTO publishers(publisher_id,slug,display_name,account_status,terms_version,terms_accepted_at,terms_accepted_by_user_id,install_public_key)
@@ -23,7 +23,7 @@ INSERT INTO publisher_supplier_offers(supplier_offer_id,supplier_site_id,publish
 VALUES ('o1','s1','p1','d1','hotel','hotel','pp1','https://www.trip.com/hotels?trip_sub1=fixture_tracking');`;
 export function fixture(t) {
   const sql = new DatabaseSync(':memory:'); sql.exec('PRAGMA foreign_keys=ON');
-  assert.equal(migrations.length, 7); for (const migration of migrations) sql.exec(migration); sql.exec(seed);
+  assert.equal(migrations.length, 8); for (const migration of migrations) sql.exec(migration); sql.exec(seed);
   t.after(() => { assert.deepEqual(sql.prepare('PRAGMA foreign_key_check').all(), []); sql.close(); });
   const database = { prepare(query) { return { bind(...args) { return { async all() {
     // Numbered D1 placeholders are named parameters in node:sqlite.
