@@ -11,9 +11,10 @@ test("unverified drafts may share hostname but only one verified claim may exist
 
     const dir = new URL("../../collector/migrations/", import.meta.url);
     const files = readdirSync(dir)
-      .filter(name => /^\d{4}_.*\.sql$/.test(name))
+      .filter(name => /^000[1-8]_.*\.sql$/.test(name))
       .sort();
 
+    assert.equal(files.length, 8);
     assert.ok(files.includes("0008_verified_hostname_claim_v1.sql"));
 
     for (const file of files) {

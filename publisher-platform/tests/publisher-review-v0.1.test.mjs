@@ -9,7 +9,7 @@ function fixture(t) {
   sqlite.exec("PRAGMA foreign_keys = ON");
   const migrations = new URL("../../collector/migrations/", import.meta.url);
   for (const file of readdirSync(migrations)
-    .filter(name => /^000[1-8]_.*\.sql$/.test(name)).sort()) {
+    .filter(name => /^000[1-9]_.*\.sql$/.test(name)).sort()) {
     sqlite.exec(readFileSync(new URL(file, migrations), "utf8"));
   }
 
@@ -27,15 +27,15 @@ function fixture(t) {
     );
     INSERT INTO publisher_domains (
       domain_id,publisher_id,hostname,is_primary,
-      install_status,verification_status,review_status,
+      install_status,verification_status,claim_status,claim_acquired_at,review_status,
       monetization_status,first_seen_at,last_seen_at,verified_at
     ) VALUES (
       'd','p','example.test',1,
-      'detected','verified','pending',
+      'detected','verified','claimed',CURRENT_TIMESTAMP,'pending',
       'disabled',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
     ),(
       'd-secondary','p','secondary.example.test',0,
-      'pending','unverified','pending','disabled',NULL,NULL,NULL
+      'pending','unverified','unclaimed',NULL,'pending','disabled',NULL,NULL,NULL
     );
     INSERT INTO publisher_placements (
       placement_id,publisher_id,placement,supplier,external_tracking_key
@@ -178,6 +178,18 @@ test("approve retry is idempotent and preserves timestamps", async t => {
   );
 });
 
+test("approve retry fails closed after hostname claim release", async t => {
+  const f = fixture(t);
+  assert.equal((await reviewPublisher(f.database, input("approve"))).status, 200);
+  f.sqlite.exec(`
+    UPDATE publisher_domains
+    SET claim_status='released', claim_ended_at=CURRENT_TIMESTAMP,
+        claim_end_reason='owner_release'
+    WHERE domain_id='d'
+  `);
+  assert.equal((await reviewPublisher(f.database, input("approve"))).status, 409);
+});
+
 test("reject atomically rejects publisher and primary domain without monetization", async t => {
   const f = fixture(t);
   const protectedBefore = protectedSnapshot(f.sqlite);
@@ -227,7 +239,9 @@ const approvalInvalid = [
   "UPDATE publishers SET install_public_key=NULL",
   "UPDATE publishers SET install_public_key='cfi_INVALID'",
   "UPDATE publisher_domains SET install_status='not_detected' WHERE domain_id='d'",
-  "UPDATE publisher_domains SET verification_status='failed' WHERE domain_id='d'",
+  "UPDATE publisher_domains SET verification_status='failed', claim_status='unclaimed', claim_acquired_at=NULL WHERE domain_id='d'",
+  "UPDATE publisher_domains SET claim_status='released', claim_ended_at=CURRENT_TIMESTAMP, claim_end_reason='owner_release' WHERE domain_id='d'",
+  "UPDATE publisher_domains SET claim_status='revoked', claim_ended_at=CURRENT_TIMESTAMP, claim_end_reason='admin_revoke' WHERE domain_id='d'",
   "UPDATE publisher_domains SET first_seen_at=NULL WHERE domain_id='d'",
   "UPDATE publisher_domains SET last_seen_at=NULL WHERE domain_id='d'",
   "UPDATE publisher_domains SET verified_at=NULL WHERE domain_id='d'"
@@ -254,6 +268,7 @@ test("reject remains available for a degraded submitted application", async t =>
       WHERE publisher_id='p';
     UPDATE publisher_domains
       SET install_status='not_detected',verification_status='failed',
+          claim_status='unclaimed',claim_acquired_at=NULL,
           first_seen_at=NULL,last_seen_at=NULL,verified_at=NULL
       WHERE domain_id='d';
   `);

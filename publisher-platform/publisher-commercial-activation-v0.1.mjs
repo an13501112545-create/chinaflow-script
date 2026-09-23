@@ -84,6 +84,7 @@ async function readState(database, publisherId) {
       d.domain_id,
       d.install_status,
       d.verification_status,
+      d.claim_status,
       d.review_status,
       d.monetization_status,
       d.first_seen_at,
@@ -136,6 +137,7 @@ function commonEligibility(state) {
     !!state.domain_id &&
     state.install_status === "detected" &&
     state.verification_status === "verified" &&
+    state.claim_status === "claimed" &&
     state.review_status === "approved" &&
     state.first_seen_at !== null &&
     state.last_seen_at !== null &&
@@ -326,6 +328,7 @@ function placementStatement(database, state, offer, ids, requirePreviousChange) 
       AND p.install_public_key = ?
       AND d.install_status = 'detected'
       AND d.verification_status = 'verified'
+      AND d.claim_status = 'claimed'
       AND d.review_status = 'approved'
       AND d.monetization_status = 'disabled'
       AND d.first_seen_at IS NOT NULL
@@ -380,6 +383,7 @@ function offerStatement(database, state, offer, ids) {
       AND p.account_status='pending_review'
       AND d.monetization_status='disabled'
       AND d.review_status='approved'
+      AND d.claim_status='claimed'
       AND s.supplier_site_id=?
       AND s.provisioning_status='active'
   `).bind(
@@ -453,6 +457,7 @@ export async function activatePublisherCommercially(database, input) {
         AND monetization_status='disabled'
         AND review_status='approved'
         AND verification_status='verified'
+        AND claim_status='claimed'
         AND install_status='detected'
         AND (SELECT count(*) FROM publisher_supplier_offers o
              WHERE o.publisher_id=publisher_domains.publisher_id
@@ -488,6 +493,7 @@ export async function activatePublisherCommercially(database, input) {
             AND d.is_primary=1
             AND d.review_status='approved'
             AND d.verification_status='verified'
+            AND d.claim_status='claimed'
             AND d.monetization_status='enabled'
             AND s.provisioning_status='active'
             AND s.provisioned_at IS NOT NULL

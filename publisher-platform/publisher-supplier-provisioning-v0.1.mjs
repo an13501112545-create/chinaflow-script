@@ -62,6 +62,7 @@ async function readState(database, publisherId) {
       d.domain_id,
       d.install_status,
       d.verification_status,
+      d.claim_status,
       d.review_status,
       d.monetization_status,
       d.first_seen_at,
@@ -109,6 +110,7 @@ function eligible(state) {
     !!state.domain_id &&
     state.install_status === "detected" &&
     state.verification_status === "verified" &&
+    state.claim_status === "claimed" &&
     state.review_status === "approved" &&
     state.monetization_status === "disabled" &&
     state.first_seen_at !== null &&
@@ -194,6 +196,7 @@ export async function startSupplierProvisioning(database, input) {
       AND p.install_public_key = ?
       AND d.install_status = 'detected'
       AND d.verification_status = 'verified'
+      AND d.claim_status = 'claimed'
       AND d.review_status = 'approved'
       AND d.monetization_status = 'disabled'
       AND d.first_seen_at IS NOT NULL
@@ -311,6 +314,7 @@ export async function completeSupplierProvisioning(database, input) {
           AND p.install_public_key = ?
           AND d.install_status = 'detected'
           AND d.verification_status = 'verified'
+          AND d.claim_status = 'claimed'
           AND d.review_status = 'approved'
           AND d.monetization_status = 'disabled'
           AND d.first_seen_at IS NOT NULL

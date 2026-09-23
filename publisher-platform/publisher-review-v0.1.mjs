@@ -32,6 +32,7 @@ async function readState(database, publisherId) {
       d.domain_id,
       d.install_status,
       d.verification_status,
+      d.claim_status,
       d.review_status,
       d.monetization_status,
       d.first_seen_at,
@@ -71,6 +72,7 @@ function isIdempotent(state, decision) {
   if (!state || Number(state.primary_count) !== 1) return false;
   if (decision === "approve") {
     return state.account_status === "pending_review" &&
+      state.claim_status === "claimed" &&
       state.review_status === "approved";
   }
   return state.account_status === "rejected" &&
@@ -79,6 +81,7 @@ function isIdempotent(state, decision) {
 
 async function reviewApprove(database, state) {
   if (state.account_status !== "pending_review" ||
+      state.claim_status !== "claimed" ||
       state.review_status !== "pending" ||
       Number(state.primary_count) !== 1 ||
       !isValidInstallPublicKey(state.install_public_key)) {
@@ -96,6 +99,7 @@ async function reviewApprove(database, state) {
       AND review_status = 'pending'
       AND install_status = 'detected'
       AND verification_status = 'verified'
+      AND claim_status = 'claimed'
       AND first_seen_at IS NOT NULL
       AND last_seen_at IS NOT NULL
       AND verified_at IS NOT NULL

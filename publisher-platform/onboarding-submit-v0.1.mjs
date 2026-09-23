@@ -61,6 +61,7 @@ export async function submitOnboarding(database, token) {
       AND EXISTS (SELECT 1 FROM publisher_domains d
         WHERE d.publisher_id = publishers.publisher_id AND d.is_primary = 1
           AND d.install_status = 'detected' AND d.verification_status = 'verified'
+          AND d.claim_status = 'claimed'
           AND d.first_seen_at IS NOT NULL AND d.last_seen_at IS NOT NULL
           AND d.verified_at IS NOT NULL)
     RETURNING account_status

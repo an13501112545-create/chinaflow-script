@@ -16,7 +16,7 @@ async function fixture(t) {
   });
   sqlite.exec("PRAGMA foreign_keys = ON");
   const migrations = new URL("../../collector/migrations/", import.meta.url);
-  for (const file of readdirSync(migrations).filter(n => /^000[1-8]_.*\.sql$/.test(n)).sort()) {
+  for (const file of readdirSync(migrations).filter(n => /^(?:000[1-9]|0010)_.*\.sql$/.test(n)).sort()) {
     sqlite.exec(readFileSync(new URL(file, migrations), "utf8"));
   }
   sqlite.exec(`
@@ -26,8 +26,8 @@ async function fixture(t) {
       ('p','p','Publisher','chinaflow-publisher-terms-v1',CURRENT_TIMESTAMP,'u','cfi_0123456789abcdef0123456789abcdef');
     INSERT INTO publisher_memberships (membership_id,publisher_id,user_id) VALUES ('m','p','u');
     INSERT INTO publisher_domains (domain_id,publisher_id,hostname,is_primary,install_status,
-      verification_status,first_seen_at,last_seen_at,verified_at) VALUES
-      ('d','p','example.test',1,'detected','verified',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+      verification_status,claim_status,claim_acquired_at,first_seen_at,last_seen_at,verified_at) VALUES
+      ('d','p','example.test',1,'detected','verified','claimed',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
   `);
   const state = { beforeUpdate: null, updates: 0 };
   const db = { prepare(sql) { return { bind(...values) {
@@ -120,6 +120,8 @@ const invalid = [
   ["UPDATE publishers SET install_public_key=NULL", 409],
   ["UPDATE publishers SET install_public_key='cfi_INVALID'", 409],
   ["UPDATE publisher_domains SET is_primary=0", 409],
+  ["UPDATE publisher_domains SET claim_status='released', claim_ended_at=CURRENT_TIMESTAMP, claim_end_reason='owner_release'", 409],
+  ["UPDATE publisher_domains SET claim_status='revoked', claim_ended_at=CURRENT_TIMESTAMP, claim_end_reason='admin_revoke'", 409],
   ...["first_seen_at", "last_seen_at", "verified_at"].map(field => [`UPDATE publisher_domains SET ${field}=NULL`, 409]),
   ...["active", "suspended", "rejected", "closed"].map(value => [`UPDATE publishers SET account_status='${value}'`, 409]),
   ["UPDATE publisher_sessions SET revoked_at=CURRENT_TIMESTAMP", 401],
@@ -133,7 +135,9 @@ const invalid = [
 for (const install of ["pending", "not_detected", "detected"]) {
   for (const verification of ["unverified", "failed", "verified"]) {
     if (install !== "detected" || verification !== "verified") {
-      invalid.push([`UPDATE publisher_domains SET install_status='${install}', verification_status='${verification}'`, 409]);
+      invalid.push([verification === "verified"
+        ? `UPDATE publisher_domains SET install_status='${install}', verification_status='${verification}'`
+        : `UPDATE publisher_domains SET install_status='${install}', verification_status='${verification}', claim_status='unclaimed', claim_acquired_at=NULL`, 409]);
     }
   }
 }

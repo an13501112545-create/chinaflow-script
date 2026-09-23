@@ -17,8 +17,8 @@ async function fixture(t) {
   t.after(() => sqlite.close());
   sqlite.exec("PRAGMA foreign_keys = ON");
   const migrations = new URL("../../collector/migrations/", import.meta.url);
-  const files = readdirSync(migrations).filter(name => /^000[1-8]_.*\.sql$/.test(name)).sort();
-  assert.equal(files.length, 8);
+  const files = readdirSync(migrations).filter(name => /^000[1-9]_.*\.sql$/.test(name)).sort();
+  assert.equal(files.length, 9);
   for (const file of files) sqlite.exec(readFileSync(new URL(file, migrations), "utf8"));
   assert.equal(sqlite.prepare("PRAGMA foreign_keys").get().foreign_keys, 1);
   sqlite.exec(`INSERT INTO publisher_users (user_id,email,email_normalized) VALUES
@@ -99,6 +99,10 @@ test("create, authorized GET/retry, exact defaults, no supplier or placement wri
   assert.equal(d.is_primary, 1);
   assert.equal(d.install_status, "pending");
   assert.equal(d.verification_status, "unverified");
+  assert.equal(d.claim_status, "unclaimed");
+  assert.equal(d.claim_acquired_at, null);
+  assert.equal(d.claim_ended_at, null);
+  assert.equal(d.claim_end_reason, null);
   assert.equal(d.review_status, "pending");
   assert.equal(d.monetization_status, "disabled");
   for (const key of ["first_seen_at", "last_seen_at", "verified_at", "reviewed_at"]) assert.equal(d[key], null);

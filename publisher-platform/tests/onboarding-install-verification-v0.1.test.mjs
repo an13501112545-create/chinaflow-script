@@ -43,6 +43,10 @@ test("second verified hostname claim returns exact conflict and preserves both t
   });
   assert.deepEqual(domains(), [winner, before[1]]);
   assert.deepEqual(domains().map(row => row.verification_status), ["verified", "unverified"]);
+  assert.deepEqual(domains().map(row => row.claim_status), ["claimed", "unclaimed"]);
+  assert.ok(domains()[0].claim_acquired_at);
+  assert.equal(domains()[0].claim_ended_at, null);
+  assert.equal(domains()[0].claim_end_reason, null);
   assert.deepEqual(f.sqlite.prepare("PRAGMA foreign_key_check").all(), []);
 });
 
@@ -201,10 +205,10 @@ async function verificationFixture(t) {
   );
 
   const files = readdirSync(migrations)
-    .filter(name => /^000[1-8]_.*\.sql$/.test(name))
+    .filter(name => /^000[1-9]_.*\.sql$/.test(name))
     .sort();
 
-  assert.equal(files.length, 8);
+  assert.equal(files.length, 9);
 
   for (const file of files) {
     sqlite.exec(
@@ -1110,6 +1114,63 @@ test(
       successAgainRow.first_seen_at,
       firstSeen
     );
+
+    const claimBeforeRetryFailure =
+      f.sqlite.prepare(`
+        SELECT claim_status,claim_acquired_at,
+               claim_ended_at,claim_end_reason
+        FROM publisher_domains
+        WHERE domain_id = 'persist-domain-1'
+      `).get();
+
+    assert.equal(claimBeforeRetryFailure.claim_status, "claimed");
+    assert.ok(claimBeforeRetryFailure.claim_acquired_at);
+    assert.equal(claimBeforeRetryFailure.claim_ended_at, null);
+    assert.equal(claimBeforeRetryFailure.claim_end_reason, null);
+
+    const transientMissingAfterClaim =
+      await record(
+        f.db,
+        auth1.context,
+        {
+          detected: false,
+          reason: "loader_not_found"
+        }
+      );
+
+    assert.deepEqual(
+      transientMissingAfterClaim,
+      {
+        status: 200,
+        body: {
+          verification: {
+            detected: false,
+            reason: "loader_not_found",
+            install_status: "not_detected",
+            verification_status: "verified"
+          }
+        }
+      }
+    );
+
+    const claimAfterRetryFailure =
+      f.sqlite.prepare(`
+        SELECT install_status,verification_status,
+               claim_status,claim_acquired_at,
+               claim_ended_at,claim_end_reason
+        FROM publisher_domains
+        WHERE domain_id = 'persist-domain-1'
+      `).get();
+
+    assert.equal(claimAfterRetryFailure.install_status, "not_detected");
+    assert.equal(claimAfterRetryFailure.verification_status, "verified");
+    assert.equal(claimAfterRetryFailure.claim_status, "claimed");
+    assert.equal(
+      claimAfterRetryFailure.claim_acquired_at,
+      claimBeforeRetryFailure.claim_acquired_at
+    );
+    assert.equal(claimAfterRetryFailure.claim_ended_at, null);
+    assert.equal(claimAfterRetryFailure.claim_end_reason, null);
 
     /*
      * NOT DETECTED:

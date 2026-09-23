@@ -788,6 +788,15 @@ export async function recordInstallVerificationResult(
           SET
             install_status = 'detected',
             verification_status = 'verified',
+            claim_status = 'claimed',
+            claim_acquired_at =
+              CASE
+                WHEN claim_status = 'claimed'
+                  THEN claim_acquired_at
+                ELSE CURRENT_TIMESTAMP
+              END,
+            claim_ended_at = NULL,
+            claim_end_reason = NULL,
             first_seen_at =
               COALESCE(
                 first_seen_at,

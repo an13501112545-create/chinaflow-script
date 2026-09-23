@@ -8,7 +8,7 @@ export const origin = 'https://example.test';
 export function activeInput() {
   return { publisher: { publisher_id: 'p1', account_status: 'active', terms_version: 'chinaflow-publisher-terms-v1',
     terms_accepted_at: '2026-01-01', has_terms_actor: true },
-  domain: { domain_id: 'd1', hostname: 'example.test', verification_status: 'verified', review_status: 'approved', monetization_status: 'enabled' },
+  domain: { domain_id: 'd1', hostname: 'example.test', verification_status: 'verified', claim_status: 'claimed', review_status: 'approved', monetization_status: 'enabled' },
   supplierSite: { publisher_id: 'p1', domain_id: 'd1', supplier: 'trip.com', provisioning_status: 'active',
     offers: [{ product: 'hotel', placement: 'fixture_tracking', url: 'https://www.trip.com/hotels?trip_sub1=fixture_tracking' }] } };
 }
@@ -23,7 +23,7 @@ test('active install contract preserves attribution and destination without anal
 for (const [group, field, values] of [
   ['publisher','account_status',['draft','suspended']], ['publisher','terms_version',[null,undefined,'unsupported']],
   ['publisher','terms_accepted_at',[null,undefined]], ['publisher','has_terms_actor',[false,undefined]],
-  ['domain','verification_status',['unverified']], ['domain','review_status',['pending']],
+  ['domain','verification_status',['unverified']], ['domain','claim_status',['unclaimed','released','revoked']], ['domain','review_status',['pending']],
   ['domain','monetization_status',['disabled','paused']], ['supplierSite','provisioning_status',['pending','disabled']],
   ['supplierSite','publisher_id',['p2']], ['supplierSite','domain_id',['d2']], ['supplierSite','offers',[[]]]
 ]) for (const value of values) test(`inert gate ${group}.${field} ${String(value)}`, () => {

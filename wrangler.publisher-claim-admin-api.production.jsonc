@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "chinaflow-publisher-claim-admin-api-v0-1",
+  "main": "publisher-platform/publisher-claim-admin-api-worker-v0.1.mjs",
+  "compatibility_date": "2026-08-14",
+  "compatibility_flags": [
+    "global_fetch_strictly_public"
+  ],
+  "d1_databases": [
+    {
+      "binding": "CHINAFLOW_EVENTS",
+      "database_name": "chinaflow-events-v0-1",
+      "database_id": "838917da-3fb8-437e-bc00-caff178798e8"
+    }
+  ],
+  "vars": {
+    "APP_ENVIRONMENT": "production",
+    "CLAIM_LIFECYCLE_MUTATIONS_ENABLED": "false"
+  },
+  "secrets": {
+    "required": ["CLAIM_ADMIN_API_TOKEN"]
+  }
+}

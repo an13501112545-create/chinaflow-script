@@ -13,7 +13,7 @@ function fixture(t) {
 
   const migrations = new URL("../../collector/migrations/", import.meta.url);
   for (const file of readdirSync(migrations)
-    .filter(name => /^000[1-8]_.*\.sql$/.test(name)).sort()) {
+    .filter(name => /^000[1-9]_.*\.sql$/.test(name)).sort()) {
     sqlite.exec(readFileSync(new URL(file, migrations), "utf8"));
   }
 
@@ -33,12 +33,12 @@ function fixture(t) {
 
     INSERT INTO publisher_domains (
       domain_id,publisher_id,hostname,is_primary,
-      install_status,verification_status,review_status,
+      install_status,verification_status,claim_status,claim_acquired_at,review_status,
       monetization_status,first_seen_at,last_seen_at,
       verified_at,reviewed_at
     ) VALUES (
       'd','p','example.test',1,
-      'detected','verified','approved',
+      'detected','verified','claimed',CURRENT_TIMESTAMP,'approved',
       'disabled',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,
       CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
     );
@@ -207,7 +207,9 @@ const startInvalid = [
   "UPDATE publisher_domains SET monetization_status='enabled'",
   "UPDATE publisher_domains SET monetization_status='paused'",
   "UPDATE publisher_domains SET install_status='not_detected'",
-  "UPDATE publisher_domains SET verification_status='failed'",
+  "UPDATE publisher_domains SET verification_status='failed', claim_status='unclaimed', claim_acquired_at=NULL",
+  "UPDATE publisher_domains SET claim_status='released', claim_ended_at=CURRENT_TIMESTAMP, claim_end_reason='owner_release'",
+  "UPDATE publisher_domains SET claim_status='revoked', claim_ended_at=CURRENT_TIMESTAMP, claim_end_reason='admin_revoke'",
   "UPDATE publisher_domains SET first_seen_at=NULL",
   "UPDATE publisher_domains SET last_seen_at=NULL",
   "UPDATE publisher_domains SET verified_at=NULL",
@@ -384,6 +386,33 @@ test("complete retry with identical credentials is idempotent", async t => {
   assert.equal(retry.status, 200);
   assert.equal(retry.body.provisioning.completed, false);
   assert.deepEqual(site(f.sqlite), before);
+});
+
+test("complete and exact retry fail closed after hostname claim release", async t => {
+  const pending = fixture(t);
+  assert.equal((await startSupplierProvisioning(pending.database, { publisher_id: "p" })).status, 201);
+  pending.sqlite.exec(`
+    UPDATE publisher_domains
+    SET claim_status='released', claim_ended_at=CURRENT_TIMESTAMP,
+        claim_end_reason='owner_release'
+    WHERE domain_id='d'
+  `);
+  assert.equal((await completeSupplierProvisioning(pending.database, {
+    publisher_id: "p", aid: "10021103", sid: "330739613", sid_name: "chinaflow-e11"
+  })).status, 409);
+  assert.equal(site(pending.sqlite).provisioning_status, "pending");
+
+  const active = fixture(t);
+  assert.equal((await startSupplierProvisioning(active.database, { publisher_id: "p" })).status, 201);
+  const credentials = { publisher_id: "p", aid: "10021103", sid: "330739613", sid_name: "chinaflow-e11" };
+  assert.equal((await completeSupplierProvisioning(active.database, credentials)).status, 200);
+  active.sqlite.exec(`
+    UPDATE publisher_domains
+    SET claim_status='released', claim_ended_at=CURRENT_TIMESTAMP,
+        claim_end_reason='owner_release'
+    WHERE domain_id='d'
+  `);
+  assert.equal((await completeSupplierProvisioning(active.database, credentials)).status, 409);
 });
 
 test("complete rejects credential drift after activation", async t => {

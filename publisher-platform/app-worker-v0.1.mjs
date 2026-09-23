@@ -7,6 +7,11 @@ import { validateSession } from "./auth-session-validate-v0.1.mjs";
 import { revokeSessionByToken } from "./auth-session-store-v0.1.mjs";
 import { renderLegalMarkdown } from "./legal-document-v0.1.mjs";
 import { verifyPublisherInstallation } from "./onboarding-install-verification-v0.1.mjs";
+import {
+  claimLifecycleMutationsEnabled,
+  readOwnerReleaseInput,
+  releasePublisherHostname
+} from "./publisher-domain-claim-mutations-v0.1.mjs";
 
 function requireAppOrigin(env) {
   const value = env?.APP_ORIGIN;
@@ -104,6 +109,7 @@ const LOGOUT_ROUTE = "/api/auth/logout";
 const PUBLISHER_TERMS_ROUTE = "/legal/chinaflow-publisher-terms-v1";
 const ONBOARDING_ROUTE = "/onboarding";
 const VERIFY_INSTALL_ROUTE = "/api/onboarding/verify-install";
+const RELEASE_HOSTNAME_ROUTE = "/api/onboarding/release-hostname";
 const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 const TURNSTILE_ACTION = "publisher_magic_link";
 const TURNSTILE_SITE_KEY_PLACEHOLDER =
@@ -825,6 +831,31 @@ a{color:#0b7285}
 </main>
 </body>
 </html>`);
+  }
+
+  if (url.pathname === RELEASE_HOSTNAME_ROUTE) {
+    // The route ships disabled so claim-aware code can be deployed before
+    // migration 0010 retires the legacy verified-hostname index.
+    if (!claimLifecycleMutationsEnabled(env)) {
+      return json(404, { error: "not_found" });
+    }
+    if (request.method !== "POST") {
+      return json(405, { error: "method_not_allowed" }, { "Allow": "POST" });
+    }
+    if (request.headers.get("Origin") !== requireAppOrigin(env)) {
+      return json(403, { error: "forbidden" });
+    }
+    const token = readSessionCookie(request.headers.get("Cookie"));
+    if (!token) return json(401, { error: "unauthenticated" });
+    if (url.search) return json(400, { error: "invalid_input" });
+    const input = await readOwnerReleaseInput(request);
+    if (!input) return json(400, { error: "invalid_input" });
+    const result = await releasePublisherHostname(
+      env?.CHINAFLOW_EVENTS,
+      token,
+      input
+    );
+    return json(result.status, result.body);
   }
 
   if (url.pathname === "/api/onboarding/submit") {

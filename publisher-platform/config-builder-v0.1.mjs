@@ -97,6 +97,7 @@ function monetizationReady({
   return (
     publisher.account_status === "active" &&
     domain.verification_status === "verified" &&
+    domain.claim_status === "claimed" &&
     domain.review_status === "approved" &&
     domain.monetization_status === "enabled" &&
     supplierSite.supplier === "trip.com" &&

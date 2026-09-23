@@ -7,14 +7,14 @@ import { buildInstallConfigFromD1 } from '../config-reader-d1-v0.1.mjs';
 import { inert, origin } from './config-builder-install-v0.1.test.mjs';
 export const key = `cfi_${'a'.repeat(32)}`;
 export const migrations = readdirSync(new URL('../../collector/migrations/', import.meta.url))
-  .filter(n => /^000[1-8]_.*\.sql$/.test(n)).sort().map(n => readFileSync(new URL(`../../collector/migrations/${n}`, import.meta.url), 'utf8'));
+  .filter(n => /^000[1-9]_.*\.sql$/.test(n)).sort().map(n => readFileSync(new URL(`../../collector/migrations/${n}`, import.meta.url), 'utf8'));
 export const seed = `
 INSERT INTO publisher_users(user_id,email,email_normalized) VALUES ('u1','fixture@example.test','fixture@example.test');
 INSERT INTO publishers(publisher_id,slug,display_name,account_status,terms_version,terms_accepted_at,terms_accepted_by_user_id,install_public_key)
 VALUES ('p1','fixture-one','Fixture','active','chinaflow-publisher-terms-v1','2026-01-01','u1','${key}');
 INSERT INTO publishers(publisher_id,slug,display_name) VALUES ('p2','fixture-two','Other');
-INSERT INTO publisher_domains(domain_id,publisher_id,hostname,verification_status,review_status,monetization_status)
-VALUES ('d1','p1','example.test','verified','approved','enabled'),('d2','p2','other.test','verified','approved','enabled');
+INSERT INTO publisher_domains(domain_id,publisher_id,hostname,verification_status,claim_status,claim_acquired_at,review_status,monetization_status)
+VALUES ('d1','p1','example.test','verified','claimed','2026-01-01','approved','enabled'),('d2','p2','other.test','verified','claimed','2026-01-01','approved','enabled');
 INSERT INTO publisher_supplier_sites(supplier_site_id,publisher_id,domain_id,supplier,provisioning_status)
 VALUES ('s1','p1','d1','trip.com','active');
 INSERT INTO publisher_placements(placement_id,publisher_id,placement,supplier,external_tracking_key)
@@ -23,7 +23,7 @@ INSERT INTO publisher_supplier_offers(supplier_offer_id,supplier_site_id,publish
 VALUES ('o1','s1','p1','d1','hotel','hotel','pp1','https://www.trip.com/hotels?trip_sub1=fixture_tracking');`;
 export function fixture(t) {
   const sql = new DatabaseSync(':memory:'); sql.exec('PRAGMA foreign_keys=ON');
-  assert.equal(migrations.length, 8); for (const migration of migrations) sql.exec(migration); sql.exec(seed);
+  assert.equal(migrations.length, 9); for (const migration of migrations) sql.exec(migration); sql.exec(seed);
   t.after(() => { assert.deepEqual(sql.prepare('PRAGMA foreign_key_check').all(), []); sql.close(); });
   const database = { prepare(query) { return { bind(...args) { return { async all() {
     // Numbered D1 placeholders are named parameters in node:sqlite.
@@ -42,7 +42,8 @@ for (const mutation of [
   "UPDATE publishers SET account_status='draft'",
   "UPDATE publishers SET account_status='draft'; UPDATE publisher_domains SET install_status='detected'", "UPDATE publishers SET terms_version=NULL",
   "UPDATE publishers SET terms_version='unsupported'", "UPDATE publishers SET terms_accepted_at=NULL",
-  "UPDATE publishers SET terms_accepted_by_user_id=NULL", "UPDATE publisher_domains SET verification_status='unverified'",
+  "UPDATE publishers SET terms_accepted_by_user_id=NULL", "UPDATE publisher_domains SET verification_status='unverified', claim_status='unclaimed', claim_acquired_at=NULL",
+  "UPDATE publisher_domains SET claim_status='released', claim_ended_at='2026-01-02', claim_end_reason='owner_release'",
   "UPDATE publisher_domains SET review_status='pending'", "UPDATE publisher_domains SET monetization_status='disabled'",
   "UPDATE publisher_domains SET monetization_status='paused'", "UPDATE publisher_supplier_sites SET provisioning_status='pending'",
   "UPDATE publisher_supplier_sites SET provisioning_status='disabled'", "DELETE FROM publisher_supplier_offers; DELETE FROM publisher_supplier_sites",

@@ -66,6 +66,7 @@ SELECT
   d.domain_id,
   d.hostname,
   d.verification_status,
+  d.claim_status,
   d.review_status,
   d.monetization_status,
 
@@ -143,6 +144,8 @@ ORDER BY o.supplier_offer_id
     hostname: first.hostname,
     verification_status:
       first.verification_status,
+    claim_status:
+      first.claim_status,
     review_status:
       first.review_status,
     monetization_status:

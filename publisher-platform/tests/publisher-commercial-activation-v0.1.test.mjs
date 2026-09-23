@@ -10,7 +10,7 @@ function fixture(t) {
   sqlite.exec("PRAGMA foreign_keys = ON");
   const migrations = new URL("../../collector/migrations/", import.meta.url);
   for (const file of readdirSync(migrations)
-    .filter(name => /^000[1-8]_.*\.sql$/.test(name)).sort()) {
+    .filter(name => /^000[1-9]_.*\.sql$/.test(name)).sort()) {
     sqlite.exec(readFileSync(new URL(file, migrations), "utf8"));
   }
 
@@ -30,12 +30,12 @@ function fixture(t) {
 
     INSERT INTO publisher_domains (
       domain_id,publisher_id,hostname,is_primary,
-      install_status,verification_status,review_status,
+      install_status,verification_status,claim_status,claim_acquired_at,review_status,
       monetization_status,first_seen_at,last_seen_at,
       verified_at,reviewed_at
     ) VALUES (
       'd','p','example.test',1,
-      'detected','verified','approved','disabled',
+      'detected','verified','claimed',CURRENT_TIMESTAMP,'approved','disabled',
       CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,
       CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
     );
@@ -271,7 +271,9 @@ const invalidEligibility = [
   "UPDATE publishers SET install_public_key=NULL",
   "UPDATE publishers SET install_public_key='bad'",
   "UPDATE publisher_domains SET install_status='not_detected'",
-  "UPDATE publisher_domains SET verification_status='failed'",
+  "UPDATE publisher_domains SET verification_status='failed', claim_status='unclaimed', claim_acquired_at=NULL",
+  "UPDATE publisher_domains SET claim_status='released', claim_ended_at=CURRENT_TIMESTAMP, claim_end_reason='owner_release'",
+  "UPDATE publisher_domains SET claim_status='revoked', claim_ended_at=CURRENT_TIMESTAMP, claim_end_reason='admin_revoke'",
   "UPDATE publisher_domains SET review_status='pending'",
   "UPDATE publisher_domains SET review_status='rejected'",
   "UPDATE publisher_domains SET monetization_status='enabled'",
@@ -372,6 +374,18 @@ test("activation retry with exact same graph is idempotent", async t => {
     before.domain
   );
   assert.deepEqual(commercialRows(f.sqlite), before.rows);
+});
+
+test("active activation retry fails closed after hostname claim release", async t => {
+  const f = fixture(t);
+  assert.equal((await activatePublisherCommercially(f.database, input())).status, 200);
+  f.sqlite.exec(`
+    UPDATE publisher_domains
+    SET claim_status='released', claim_ended_at=CURRENT_TIMESTAMP,
+        claim_end_reason='owner_release'
+    WHERE domain_id='d'
+  `);
+  assert.equal((await activatePublisherCommercially(f.database, input())).status, 409);
 });
 
 test("active publisher rejects graph drift", async t => {
