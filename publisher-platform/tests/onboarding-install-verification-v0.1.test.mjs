@@ -289,6 +289,16 @@ async function verificationFixture(t) {
         APP_ORIGIN,
         CHINAFLOW_RUNTIME_ORIGIN:
           "https://runtime.example.test",
+        VERIFY_INSTALL_IP_RATE_LIMITER: {
+          async limit() {
+            return { success: true };
+          }
+        },
+        VERIFY_INSTALL_SESSION_RATE_LIMITER: {
+          async limit() {
+            return { success: true };
+          }
+        },
         CHINAFLOW_EVENTS: db
       }
     );
@@ -1563,6 +1573,16 @@ test(
           APP_ORIGIN,
           CHINAFLOW_RUNTIME_ORIGIN:
             runtimeOrigin,
+          VERIFY_INSTALL_IP_RATE_LIMITER: {
+            async limit() {
+              return { success: true };
+            }
+          },
+          VERIFY_INSTALL_SESSION_RATE_LIMITER: {
+            async limit() {
+              return { success: true };
+            }
+          },
           CHINAFLOW_EVENTS:
             f.db
         }

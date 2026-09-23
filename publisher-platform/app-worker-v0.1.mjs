@@ -288,6 +288,71 @@ async function hasNonEmptyRequestBody(request) {
   }
 }
 
+async function verificationRateLimitKey(scope, value) {
+  const input =
+    new TextEncoder().encode(
+      `${scope}:${value}`
+    );
+
+  const digest =
+    await crypto.subtle.digest(
+      "SHA-256",
+      input
+    );
+
+  return Array.from(
+    new Uint8Array(digest),
+    byte =>
+      byte
+        .toString(16)
+        .padStart(2, "0")
+  ).join("");
+}
+
+function verificationClientIp(request) {
+  const value =
+    request.headers
+      .get("CF-Connecting-IP")
+      ?.trim();
+
+  if (
+    !value ||
+    value.length > 64 ||
+    /[\s\x00-\x1f\x7f]/u.test(value)
+  ) {
+    return "unknown";
+  }
+
+  return value;
+}
+
+async function checkVerificationRateLimit(
+  limiter,
+  key
+) {
+  if (
+    !limiter ||
+    typeof limiter.limit !== "function"
+  ) {
+    throw new Error(
+      "Verification rate limit binding unavailable"
+    );
+  }
+
+  const result =
+    await limiter.limit({ key });
+
+  return result?.success === true;
+}
+
+function verificationRateLimitedResponse() {
+  return json(
+    429,
+    { error: "rate_limited" },
+    { "Retry-After": "60" }
+  );
+}
+
 export async function handleAppRequest(request, env) {
   const url = new URL(request.url);
 
@@ -810,6 +875,45 @@ a{color:#0b7285}
         401,
         { error: "unauthenticated" }
       );
+    }
+
+    if (
+      url.search ||
+      await hasNonEmptyRequestBody(request)
+    ) {
+      return json(
+        400,
+        { error: "invalid_input" }
+      );
+    }
+
+    const clientIp =
+      verificationClientIp(request);
+
+    const ipAllowed =
+      await checkVerificationRateLimit(
+        env?.VERIFY_INSTALL_IP_RATE_LIMITER,
+        await verificationRateLimitKey(
+          "verify-install-ip",
+          clientIp
+        )
+      );
+
+    if (!ipAllowed) {
+      return verificationRateLimitedResponse();
+    }
+
+    const sessionAllowed =
+      await checkVerificationRateLimit(
+        env?.VERIFY_INSTALL_SESSION_RATE_LIMITER,
+        await verificationRateLimitKey(
+          "verify-install-session",
+          token
+        )
+      );
+
+    if (!sessionAllowed) {
+      return verificationRateLimitedResponse();
     }
 
     const result =

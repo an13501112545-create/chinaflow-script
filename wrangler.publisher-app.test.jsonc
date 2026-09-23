@@ -20,5 +20,23 @@
     "CHINAFLOW_AUTH_ORIGIN": "https://chinaflow-auth-api-v0-1-test.an13501112545.workers.dev",
     "CHINAFLOW_RUNTIME_ORIGIN": "https://chinaflow-config-api-v0-1-test.an13501112545.workers.dev",
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA"
-  }
+  },
+  "ratelimits": [
+    {
+      "name": "VERIFY_INSTALL_SESSION_RATE_LIMITER",
+      "namespace_id": "26092311",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    },
+    {
+      "name": "VERIFY_INSTALL_IP_RATE_LIMITER",
+      "namespace_id": "26092312",
+      "simple": {
+        "limit": 30,
+        "period": 60
+      }
+    }
+  ]
 }
