@@ -58,8 +58,12 @@ async function readJsonObject(request, maxBytes = 4096) {
   }
 }
 
-export function claimLifecycleMutationsEnabled(env) {
-  return env?.CLAIM_LIFECYCLE_MUTATIONS_ENABLED === "true";
+export function ownerClaimReleaseEnabled(env) {
+  return env?.OWNER_CLAIM_RELEASE_ENABLED === "true";
+}
+
+export function adminClaimRevokeEnabled(env) {
+  return env?.CLAIM_ADMIN_REVOKE_ENABLED === "true";
 }
 
 export function validateOwnerReleaseInput(input) {

@@ -8,7 +8,7 @@ import { revokeSessionByToken } from "./auth-session-store-v0.1.mjs";
 import { renderLegalMarkdown } from "./legal-document-v0.1.mjs";
 import { verifyPublisherInstallation } from "./onboarding-install-verification-v0.1.mjs";
 import {
-  claimLifecycleMutationsEnabled,
+  ownerClaimReleaseEnabled,
   readOwnerReleaseInput,
   releasePublisherHostname
 } from "./publisher-domain-claim-mutations-v0.1.mjs";
@@ -836,7 +836,7 @@ a{color:#0b7285}
   if (url.pathname === RELEASE_HOSTNAME_ROUTE) {
     // The route ships disabled so claim-aware code can be deployed before
     // migration 0010 retires the legacy verified-hostname index.
-    if (!claimLifecycleMutationsEnabled(env)) {
+    if (!ownerClaimReleaseEnabled(env)) {
       return json(404, { error: "not_found" });
     }
     if (request.method !== "POST") {

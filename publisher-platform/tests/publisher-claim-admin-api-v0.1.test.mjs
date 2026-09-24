@@ -78,7 +78,7 @@ async function request({
 
 test("claim admin mutation route is dark before cutover and rejects before secret or D1", async () => {
   const env = {
-    CLAIM_LIFECYCLE_MUTATIONS_ENABLED: "false",
+    CLAIM_ADMIN_REVOKE_ENABLED: "false",
     get CLAIM_ADMIN_API_TOKEN() { assert.fail("secret accessed"); },
     get CHINAFLOW_EVENTS() { assert.fail("D1 accessed"); }
   };
@@ -95,7 +95,7 @@ test("health remains available while mutation route is dark", async () => {
     auth: null,
     env: {
       APP_ENVIRONMENT: "test",
-      CLAIM_LIFECYCLE_MUTATIONS_ENABLED: "false"
+      CLAIM_ADMIN_REVOKE_ENABLED: "false"
     }
   });
   assert.equal(response.status, 200);
@@ -108,7 +108,7 @@ test("health remains available while mutation route is dark", async () => {
 
 test("enabled claim admin route enforces POST and bearer auth before D1", async () => {
   const env = {
-    CLAIM_LIFECYCLE_MUTATIONS_ENABLED: "true",
+    CLAIM_ADMIN_REVOKE_ENABLED: "true",
     CLAIM_ADMIN_API_TOKEN: TOKEN,
     get CHINAFLOW_EVENTS() { assert.fail("D1 accessed"); }
   };
@@ -126,7 +126,7 @@ test("enabled claim admin route enforces POST and bearer auth before D1", async 
 test("invalid configured admin secret fails closed before D1", async () => {
   for (const secret of [undefined,"","short","a".repeat(513)]) {
     const env = {
-      CLAIM_LIFECYCLE_MUTATIONS_ENABLED: "true",
+      CLAIM_ADMIN_REVOKE_ENABLED: "true",
       ...(secret === undefined ? {} : { CLAIM_ADMIN_API_TOKEN: secret }),
       get CHINAFLOW_EVENTS() { assert.fail("D1 accessed"); }
     };
@@ -138,7 +138,7 @@ test("invalid configured admin secret fails closed before D1", async () => {
 
 test("query and malformed admin input reject before D1", async () => {
   const env = {
-    CLAIM_LIFECYCLE_MUTATIONS_ENABLED: "true",
+    CLAIM_ADMIN_REVOKE_ENABLED: "true",
     CLAIM_ADMIN_API_TOKEN: TOKEN,
     get CHINAFLOW_EVENTS() { assert.fail("D1 accessed"); }
   };
@@ -158,7 +158,7 @@ test("authenticated admin revoke preserves verification and pauses monetization"
   const f = fixture(t);
   const env = {
     APP_ENVIRONMENT: "test",
-    CLAIM_LIFECYCLE_MUTATIONS_ENABLED: "true",
+    CLAIM_ADMIN_REVOKE_ENABLED: "true",
     CLAIM_ADMIN_API_TOKEN: TOKEN,
     CHINAFLOW_EVENTS: f.database
   };
@@ -187,7 +187,7 @@ test("authenticated admin revoke preserves verification and pauses monetization"
   assert.equal((await retry.json()).claim.revoked, false);
 });
 
-test("claim admin enables mutations only in TEST and Production requires isolated secret", () => {
+test("claim admin revoke gate is enabled only in TEST and Production requires isolated secret", () => {
   const testConfig = JSON.parse(readFileSync(
     new URL("../../wrangler.publisher-claim-admin-api.test.jsonc", import.meta.url),
     "utf8"
@@ -196,8 +196,8 @@ test("claim admin enables mutations only in TEST and Production requires isolate
     new URL("../../wrangler.publisher-claim-admin-api.production.jsonc", import.meta.url),
     "utf8"
   ));
-  assert.equal(testConfig.vars.CLAIM_LIFECYCLE_MUTATIONS_ENABLED, "true");
-  assert.equal(productionConfig.vars.CLAIM_LIFECYCLE_MUTATIONS_ENABLED, "false");
+  assert.equal(testConfig.vars.CLAIM_ADMIN_REVOKE_ENABLED, "true");
+  assert.equal(productionConfig.vars.CLAIM_ADMIN_REVOKE_ENABLED, "false");
   assert.deepEqual(productionConfig.secrets.required, ["CLAIM_ADMIN_API_TOKEN"]);
   assert.equal(productionConfig.secrets.required.includes("REVIEW_API_TOKEN"), false);
   assert.equal(productionConfig.secrets.required.includes("PROVISION_API_TOKEN"), false);

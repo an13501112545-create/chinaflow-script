@@ -4,7 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { hashToken } from "../auth-token-v0.1.mjs";
 import {
-  claimLifecycleMutationsEnabled,
+  ownerClaimReleaseEnabled,
+  adminClaimRevokeEnabled,
   validateOwnerReleaseInput,
   validateAdminRevokeInput,
   releasePublisherHostname,
@@ -151,10 +152,14 @@ function commercialGraph(db) {
   };
 }
 
-test("claim mutation feature gate enables only exact string true", () => {
-  assert.equal(claimLifecycleMutationsEnabled({ CLAIM_LIFECYCLE_MUTATIONS_ENABLED: "true" }), true);
+test("owner/admin claim mutation gates are independent and exact", () => {
+  assert.equal(ownerClaimReleaseEnabled({ OWNER_CLAIM_RELEASE_ENABLED: "true" }), true);
+  assert.equal(adminClaimRevokeEnabled({ CLAIM_ADMIN_REVOKE_ENABLED: "true" }), true);
+  assert.equal(ownerClaimReleaseEnabled({ CLAIM_ADMIN_REVOKE_ENABLED: "true" }), false);
+  assert.equal(adminClaimRevokeEnabled({ OWNER_CLAIM_RELEASE_ENABLED: "true" }), false);
   for (const value of [undefined, null, "", "false", "TRUE", true, 1]) {
-    assert.equal(claimLifecycleMutationsEnabled({ CLAIM_LIFECYCLE_MUTATIONS_ENABLED: value }), false);
+    assert.equal(ownerClaimReleaseEnabled({ OWNER_CLAIM_RELEASE_ENABLED: value }), false);
+    assert.equal(adminClaimRevokeEnabled({ CLAIM_ADMIN_REVOKE_ENABLED: value }), false);
   }
 });
 

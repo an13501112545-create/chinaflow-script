@@ -1,5 +1,5 @@
 import {
-  claimLifecycleMutationsEnabled,
+  adminClaimRevokeEnabled,
   readAdminRevokeInput,
   revokePublisherHostname
 } from "./publisher-domain-claim-mutations-v0.1.mjs";
@@ -76,7 +76,7 @@ export async function handleClaimAdminApiRequest(request, env) {
   }
 
   // Ship the worker dark until migration 0010 has completed in the target D1.
-  if (!claimLifecycleMutationsEnabled(env)) {
+  if (!adminClaimRevokeEnabled(env)) {
     return json(404, { error: "not_found" });
   }
 

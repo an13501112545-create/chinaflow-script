@@ -93,7 +93,7 @@ async function request({
 test("owner release route is dark before cutover and does not inspect D1", async () => {
   const env = {
     APP_ORIGIN: ORIGIN,
-    CLAIM_LIFECYCLE_MUTATIONS_ENABLED: "false",
+    OWNER_CLAIM_RELEASE_ENABLED: "false",
     get CHINAFLOW_EVENTS() { assert.fail("D1 accessed"); }
   };
   const response = await request({ env });
@@ -105,7 +105,7 @@ test("enabled owner release route enforces POST, exact Origin, session and stric
   const f = await fixture(t);
   const baseEnv = {
     APP_ORIGIN: ORIGIN,
-    CLAIM_LIFECYCLE_MUTATIONS_ENABLED: "true",
+    OWNER_CLAIM_RELEASE_ENABLED: "true",
     CHINAFLOW_EVENTS: f.database
   };
 
@@ -138,7 +138,7 @@ test("enabled owner release route requires recent reauthentication", async t => 
   f.sqlite.exec("UPDATE publisher_sessions SET created_at=datetime('now','-16 minutes')");
   const env = {
     APP_ORIGIN: ORIGIN,
-    CLAIM_LIFECYCLE_MUTATIONS_ENABLED: "true",
+    OWNER_CLAIM_RELEASE_ENABLED: "true",
     CHINAFLOW_EVENTS: f.database
   };
   const cookie = `__Host-chinaflow_session=${f.token}`;
@@ -155,7 +155,7 @@ test("enabled owner release route releases only the session-owned hostname and r
   const f = await fixture(t);
   const env = {
     APP_ORIGIN: ORIGIN,
-    CLAIM_LIFECYCLE_MUTATIONS_ENABLED: "true",
+    OWNER_CLAIM_RELEASE_ENABLED: "true",
     CHINAFLOW_EVENTS: f.database
   };
   const cookie = `__Host-chinaflow_session=${f.token}`;
@@ -185,7 +185,7 @@ test("enabled owner release route releases only the session-owned hostname and r
   assert.equal((await retry.json()).claim.released, false);
 });
 
-test("publisher app enables claim mutations only in TEST after cutover", () => {
+test("publisher app owner-release gate is enabled only in TEST", () => {
   const testConfig = JSON.parse(readFileSync(
     new URL("../../wrangler.publisher-app.test.jsonc", import.meta.url),
     "utf8"
@@ -194,6 +194,6 @@ test("publisher app enables claim mutations only in TEST after cutover", () => {
     new URL("../../wrangler.publisher-app.production.jsonc", import.meta.url),
     "utf8"
   ));
-  assert.equal(testConfig.vars.CLAIM_LIFECYCLE_MUTATIONS_ENABLED, "true");
-  assert.equal(productionConfig.vars.CLAIM_LIFECYCLE_MUTATIONS_ENABLED, "false");
+  assert.equal(testConfig.vars.OWNER_CLAIM_RELEASE_ENABLED, "true");
+  assert.equal(productionConfig.vars.OWNER_CLAIM_RELEASE_ENABLED, "false");
 });
