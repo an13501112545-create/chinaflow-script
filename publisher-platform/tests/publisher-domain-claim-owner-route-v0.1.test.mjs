@@ -185,7 +185,7 @@ test("enabled owner release route releases only the session-owned hostname and r
   assert.equal((await retry.json()).claim.released, false);
 });
 
-test("publisher app owner-release gate is enabled only in TEST", () => {
+test("publisher app owner-release gate is enabled in TEST and Production", () => {
   const testConfig = JSON.parse(readFileSync(
     new URL("../../wrangler.publisher-app.test.jsonc", import.meta.url),
     "utf8"
@@ -195,5 +195,5 @@ test("publisher app owner-release gate is enabled only in TEST", () => {
     "utf8"
   ));
   assert.equal(testConfig.vars.OWNER_CLAIM_RELEASE_ENABLED, "true");
-  assert.equal(productionConfig.vars.OWNER_CLAIM_RELEASE_ENABLED, "false");
+  assert.equal(productionConfig.vars.OWNER_CLAIM_RELEASE_ENABLED, "true");
 });
