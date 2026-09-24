@@ -2,7 +2,6 @@
   "name": "chinaflow-reporting-importer-v0-1-test",
   "main": "reporting-importer-worker-v0.1.mjs",
   "compatibility_date": "2026-08-14",
-
   "d1_databases": [
     {
       "binding": "CHINAFLOW_EVENTS",
@@ -10,5 +9,10 @@
       "database_id": "f8c07a5f-f9e7-4595-9f25-ce3d525241d9",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "secrets": {
+    "required": [
+      "CHINAFLOW_REPORTING_IMPORT_TOKEN"
+    ]
+  }
 }

@@ -2086,3 +2086,22 @@ test(
     }
   }
 );
+
+test(
+  "reporting importer TEST and Production configs require isolated import token",
+  () => {
+    for (const file of [
+      "../wrangler.reporting-importer.test.jsonc",
+      "../wrangler.reporting-importer.production.jsonc"
+    ]) {
+      const config = JSON.parse(
+        readFileSync(new URL(file, import.meta.url), "utf8")
+      );
+
+      assert.deepEqual(
+        config.secrets?.required,
+        ["CHINAFLOW_REPORTING_IMPORT_TOKEN"]
+      );
+    }
+  }
+);
