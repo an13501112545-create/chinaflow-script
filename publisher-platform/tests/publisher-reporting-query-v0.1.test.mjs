@@ -216,3 +216,56 @@ test("dark reporting route returns 404 before D1 access", async () => {
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), {error:"not_found"});
 });
+
+test("reporting page is rollout-gated and does not touch D1 while dark", async () => {
+  const env = {
+    APP_ORIGIN: ORIGIN,
+    PUBLISHER_REPORTING_QUERY_ENABLED: "false",
+    get CHINAFLOW_EVENTS() { assert.fail("D1 accessed by dark reporting page"); }
+  };
+  const response = await handleAppRequest(new Request(ORIGIN + "/reporting"), env);
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), {error:"not_found"});
+});
+
+test("reporting page serves same-origin UI and rejects non-GET methods", async () => {
+  const env = {
+    APP_ORIGIN: ORIGIN,
+    PUBLISHER_REPORTING_QUERY_ENABLED: "true"
+  };
+  const response = await handleAppRequest(new Request(ORIGIN + "/reporting"), env);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("Content-Type"), /text\/html/);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.match(response.headers.get("Content-Security-Policy"), /connect-src 'self'/);
+  const body = await response.text();
+  assert.match(body, /Publisher reporting/);
+  assert.match(body, /\/api\/auth\/session/);
+  assert.match(body, /\/api\/reporting\/summary\?/);
+  assert.match(body, /Booking amount/);
+  assert.match(body, /Commission/);
+  assert.match(body, /Placement breakdown/);
+  assert.doesNotMatch(body, /CHINAFLOW_EVENTS/);
+  assert.doesNotMatch(body, /trip_bookings/);
+  assert.doesNotMatch(body, /trip_commissions/);
+
+  for (const method of ["POST","PUT","PATCH","DELETE","OPTIONS"]) {
+    const rejected = await handleAppRequest(new Request(ORIGIN + "/reporting", {method}), env);
+    assert.equal(rejected.status, 405);
+    assert.equal(rejected.headers.get("Allow"), "GET");
+  }
+});
+
+test("active onboarding UI exposes reporting link but keeps it hidden by default", async () => {
+  const env = {
+    APP_ORIGIN: ORIGIN,
+    CHINAFLOW_RUNTIME_ORIGIN: "https://runtime.example.test",
+    PUBLISHER_REPORTING_QUERY_ENABLED: "true"
+  };
+  const response = await handleAppRequest(new Request(ORIGIN + "/onboarding"), env);
+  assert.equal(response.status, 200);
+  const body = await response.text();
+  assert.match(body, /id="reporting-link" class="action-link hidden" href="\/reporting"/);
+  assert.match(body, /show\(reportingLink\)/);
+  assert.match(body, /hide\(reportingLink\)/);
+});

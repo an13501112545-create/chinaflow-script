@@ -116,6 +116,7 @@ const ONBOARDING_ROUTE = "/onboarding";
 const VERIFY_INSTALL_ROUTE = "/api/onboarding/verify-install";
 const RELEASE_HOSTNAME_ROUTE = "/api/onboarding/release-hostname";
 const REPORTING_SUMMARY_ROUTE = "/api/reporting/summary";
+const REPORTING_PAGE_ROUTE = "/reporting";
 const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 const TURNSTILE_ACTION = "publisher_magic_link";
 const TURNSTILE_SITE_KEY_PLACEHOLDER =
@@ -440,6 +441,7 @@ pre{white-space:pre-wrap;word-break:break-all;background:#102a43;color:#f0f4f8;p
 .hidden{display:none}
 .status{margin-top:12px}
 a{color:#0b7285}
+.action-link{display:inline-block;margin-top:10px;padding:10px 14px;border-radius:8px;background:#e6f7f9;color:#086071;text-decoration:none;font-weight:650}
 </style>
 </head>
 <body>
@@ -492,6 +494,7 @@ a{color:#0b7285}
 <section id="submitted" class="card hidden">
   <h2 id="submission-heading">Submitted for review</h2>
   <p id="submission-status" role="status"></p>
+  <a id="reporting-link" class="action-link hidden" href="/reporting">View reporting</a>
 </section>
 
 <p id="fatal" class="status"></p>
@@ -525,6 +528,7 @@ a{color:#0b7285}
   const submitted = document.getElementById("submitted");
   const submissionHeading = document.getElementById("submission-heading");
   const submissionStatus = document.getElementById("submission-status");
+  const reportingLink = document.getElementById("reporting-link");
 
   let currentDraft = null;
 
@@ -532,6 +536,7 @@ a{color:#0b7285}
     hide(create);
     hide(terms);
     hide(install);
+    hide(reportingLink);
 
     const accountStatus = currentDraft?.publisher?.account_status;
     const reviewStatus = currentDraft?.primary_domain?.review_status;
@@ -544,6 +549,7 @@ a{color:#0b7285}
       submissionHeading.textContent = "ChinaFlow is active";
       submissionStatus.textContent =
         "Your publisher account is active and monetization is enabled.";
+      show(reportingLink);
       show(submitted);
       return;
     }
@@ -832,6 +838,253 @@ a{color:#0b7285}
   });
 
   boot();
+})();
+</script>
+</main>
+</body>
+</html>`);
+  }
+
+  if (url.pathname === REPORTING_PAGE_ROUTE) {
+    if (request.method !== "GET") {
+      return json(405, { error: "method_not_allowed" }, { "Allow": "GET" });
+    }
+    if (!publisherReportingQueryEnabled(env)) {
+      return json(404, { error: "not_found" });
+    }
+
+    return html(200, `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChinaFlow Publisher Reporting</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f6f9fb;color:#15202b;margin:0}
+main{max-width:1080px;margin:42px auto;padding:0 20px 64px}
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px}
+h1{font-size:30px;margin:0 0 6px}
+h2{font-size:19px;margin:0 0 14px}
+p{line-height:1.5;color:#52606d;margin:6px 0}
+a{color:#0b7285}
+.card{background:#fff;border:1px solid #d9e2ec;border-radius:12px;padding:20px;margin:16px 0}
+.filters{display:grid;grid-template-columns:1fr 1fr 1.4fr auto;gap:12px;align-items:end}
+label{display:block;font-size:13px;font-weight:700;color:#52606d;margin-bottom:6px}
+input{width:100%;padding:10px 11px;border:1px solid #bcccdc;border-radius:8px;font-size:15px;background:#fff;color:#15202b}
+button{padding:11px 16px;border:0;border-radius:8px;background:#0b7285;color:#fff;font-size:15px;cursor:pointer;white-space:nowrap}
+button:disabled{opacity:.55;cursor:default}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}
+.metric{border:1px solid #e4e7eb;border-radius:10px;padding:14px;background:#fbfdfe}
+.metric-label{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#7b8794;font-weight:700}
+.metric-value{font-size:23px;font-weight:750;margin-top:5px;word-break:break-word}
+.metric-note{font-size:12px;color:#7b8794;margin-top:4px}
+.status{min-height:24px;margin:12px 0;color:#52606d}
+.error{color:#b42318}
+.hidden{display:none}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #e4e7eb;vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
+.number{text-align:right;font-variant-numeric:tabular-nums}
+.empty{padding:20px 0;color:#7b8794}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#e6f7f9;color:#086071;font-size:12px;font-weight:700}
+@media(max-width:760px){.filters,.grid,.metric-grid{grid-template-columns:1fr}.topbar{display:block}.topbar a{display:inline-block;margin-top:8px}}
+</style>
+</head>
+<body>
+<main>
+<div class="topbar">
+  <div>
+    <h1>Publisher reporting</h1>
+    <p>Bookings and commission facts attributed to your ChinaFlow publisher account.</p>
+  </div>
+  <a href="/onboarding">Publisher settings</a>
+</div>
+
+<section class="card">
+  <form id="filters" class="filters">
+    <div><label for="from">From month</label><input id="from" name="from" type="month" required></div>
+    <div><label for="to">To month</label><input id="to" name="to" type="month" required></div>
+    <div><label for="placement">Placement (optional)</label><input id="placement" name="placement" maxlength="256" placeholder="All placements"></div>
+    <button id="refresh" type="submit">Update</button>
+  </form>
+  <p id="status" class="status" role="status"></p>
+</section>
+
+<div id="content" class="hidden">
+  <section class="grid">
+    <div class="card">
+      <h2>Bookings</h2>
+      <div id="booking-metrics" class="metric-grid"></div>
+    </div>
+    <div class="card">
+      <h2>Commissions</h2>
+      <div id="commission-metrics" class="metric-grid"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Placement breakdown</h2>
+    <p id="period-basis"></p>
+    <div id="placement-table"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+  const form = document.getElementById("filters");
+  const fromInput = document.getElementById("from");
+  const toInput = document.getElementById("to");
+  const placementInput = document.getElementById("placement");
+  const refreshButton = document.getElementById("refresh");
+  const status = document.getElementById("status");
+  const content = document.getElementById("content");
+  const bookingMetrics = document.getElementById("booking-metrics");
+  const commissionMetrics = document.getElementById("commission-metrics");
+  const placementTable = document.getElementById("placement-table");
+  const periodBasis = document.getElementById("period-basis");
+
+  function monthKey(date) {
+    return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0");
+  }
+
+  function setDefaultRange() {
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    fromInput.value = monthKey(from);
+    toInput.value = monthKey(now);
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+  }
+
+  function formatMicros(value, currency) {
+    if (value === null || value === undefined) return "—";
+    const negative = value < 0;
+    const abs = BigInt(negative ? -value : value);
+    const whole = abs / 1000000n;
+    const fraction = String(abs % 1000000n).padStart(6, "0").replace(/0+$/, "");
+    return (negative ? "−" : "") + escapeHtml(currency ?? "") + " " +
+      whole.toString() + (fraction ? "." + fraction : "");
+  }
+
+  function completeness(rows, amountRows) {
+    if (rows === 0) return "No facts";
+    if (amountRows === rows) return "Complete";
+    return amountRows + " of " + rows + " facts include an amount";
+  }
+
+  function metric(label, value, note = "") {
+    return '<div class="metric"><div class="metric-label">' + escapeHtml(label) +
+      '</div><div class="metric-value">' + value + '</div>' +
+      (note ? '<div class="metric-note">' + escapeHtml(note) + '</div>' : '') + '</div>';
+  }
+
+  function renderCurrencyMetrics(target, section, amountKey, amountLabel) {
+    const rows = section?.rows ?? 0;
+    const groups = section?.by_currency ?? [];
+    let html = metric("Facts", String(rows));
+    if (!groups.length) {
+      html += metric(amountLabel, "—", "No attributed facts in this period");
+    } else {
+      for (const group of groups) {
+        const amountRows = group[amountKey + "_rows"] ?? 0;
+        html += metric(
+          amountLabel + " · " + (group.currency ?? "No currency"),
+          formatMicros(group[amountKey], group.currency),
+          completeness(group.rows, amountRows)
+        );
+      }
+    }
+    target.innerHTML = html;
+  }
+
+  function renderPlacementTable(reporting) {
+    const bookings = reporting.bookings?.by_placement ?? [];
+    const commissions = reporting.commissions?.by_placement ?? [];
+    const keys = new Set();
+    for (const row of bookings) keys.add(row.placement + "\u0000" + (row.currency ?? ""));
+    for (const row of commissions) keys.add(row.placement + "\u0000" + (row.currency ?? ""));
+    if (!keys.size) {
+      placementTable.innerHTML = '<div class="empty">No attributed facts for this period.</div>';
+      return;
+    }
+    const bookingMap = new Map(bookings.map(row => [row.placement + "\u0000" + (row.currency ?? ""), row]));
+    const commissionMap = new Map(commissions.map(row => [row.placement + "\u0000" + (row.currency ?? ""), row]));
+    const rows = [...keys].sort().map(key => {
+      const [placement, currency] = key.split("\u0000");
+      const b = bookingMap.get(key);
+      const c = commissionMap.get(key);
+      const currencyValue = currency || null;
+      return '<tr><td><span class="badge">' + escapeHtml(placement) + '</span></td>' +
+        '<td>' + escapeHtml(currency || "—") + '</td>' +
+        '<td class="number">' + String(b?.rows ?? 0) + '</td>' +
+        '<td class="number">' + formatMicros(b?.booking_amount_micros ?? null, currencyValue) + '</td>' +
+        '<td class="number">' + String(c?.rows ?? 0) + '</td>' +
+        '<td class="number">' + formatMicros(c?.commission_amount_micros ?? null, currencyValue) + '</td></tr>';
+    }).join("");
+    placementTable.innerHTML = '<table><thead><tr><th>Placement</th><th>Currency</th><th class="number">Bookings</th><th class="number">Booking amount</th><th class="number">Commission facts</th><th class="number">Commission</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function render(reporting) {
+    renderCurrencyMetrics(bookingMetrics, reporting.bookings, "booking_amount_micros", "Booking amount");
+    renderCurrencyMetrics(commissionMetrics, reporting.commissions, "commission_amount_micros", "Commission");
+    renderPlacementTable(reporting);
+    periodBasis.textContent = "Bookings use order month. Commissions use commission month.";
+    content.classList.remove("hidden");
+  }
+
+  async function load() {
+    refreshButton.disabled = true;
+    status.className = "status";
+    status.textContent = "Loading reporting…";
+    const params = new URLSearchParams({ from: fromInput.value, to: toInput.value });
+    const placement = placementInput.value.trim();
+    if (placement) params.set("placement", placement);
+    try {
+      const response = await fetch("/api/reporting/summary?" + params.toString());
+      if (response.status === 401) {
+        location.assign("/login");
+        return;
+      }
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.reporting) {
+        content.classList.add("hidden");
+        status.className = "status error";
+        status.textContent = response.status === 404
+          ? "Reporting is available after your publisher account is active."
+          : response.status === 400
+            ? "Check the reporting filters and try again."
+            : "Unable to load reporting. Please try again.";
+        return;
+      }
+      render(body.reporting);
+      status.textContent = "Showing " + body.reporting.period.from + " through " + body.reporting.period.to +
+        (body.reporting.placement ? " · " + body.reporting.placement : " · all placements");
+    } catch {
+      content.classList.add("hidden");
+      status.className = "status error";
+      status.textContent = "Unable to load reporting. Please try again.";
+    } finally {
+      refreshButton.disabled = false;
+    }
+  }
+
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    load();
+  });
+
+  setDefaultRange();
+  fetch("/api/auth/session")
+    .then(response => response.ok ? load() : location.assign("/login"))
+    .catch(() => {
+      status.className = "status error";
+      status.textContent = "Unable to verify your session. Please try again.";
+    });
 })();
 </script>
 </main>
