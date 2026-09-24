@@ -706,17 +706,19 @@ When validation fails, stop and report the failure before modifying additional f
 - TEST earnings acceptance has created one explicitly synthetic CNY earnings row: CNY 5,000,000 micros Net Commission Revenue × 70% = CNY 3,500,000 micros, with exact-retry idempotency
 - Production earnings enablement has been accepted only at the authorization/boundary level; Production still contains zero earnings facts
 - the session-isolated Publisher Reporting Query Layer and `/reporting` UI expose confirmed accrued Publisher earnings separately from Supplier commission; the UI explicitly does not label earnings as payout or paid status
-- payout scheduling is not implemented; `publishers.account_status='closed'` has no immutable termination effective timestamp, so final-settlement threshold exemption cannot yet be applied safely
-- `collector/publisher-payout-scheduling-foundation-v0.1.md` defines the current payout-layer prerequisites and blockers
+- payout/payment execution is intentionally out of scope; actual Publisher payments may be completed manually/offline
+- the only future settlement-system need is lightweight accounting control over unsettled vs manually settled earnings, with evidence/reference sufficient to prevent duplicate settlement
+- `publishers.account_status='closed'` has no immutable termination effective timestamp, so automated final-settlement threshold exemption must not be inferred
+- `collector/publisher-payout-scheduling-foundation-v0.1.md` defines the current manual-settlement accounting boundary
 
 Next approved engineering direction:
 
 - keep real Trip.com parser mapping deferred until a real booking/commission export exists
 - when a real export becomes available, follow `collector/trip-export-parser-acceptance-v0.1.md` and do not invent source columns
 - preserve source currency and actual settlement/reconciliation evidence; do not invent FX conversion or USD earnings without an authoritative conversion fact
-- before implementing payout scheduling, model an authoritative immutable Publisher relationship-termination fact with an effective timestamp; do not infer termination from `updated_at`, domain release, monetization disablement, or current account status alone
-- after the termination fact exists, define recurring threshold/carry-forward semantics across commercial-terms versions and the final-settlement threshold exemption before creating a payout scheduling migration
-- keep payout scheduling separate from payment execution, KYB/KYC/payment-readiness facts, and actual paid-state records
+- do not build payment execution, beneficiary/KYC onboarding, payment-provider integration, or automated money movement unless separately approved
+- if manual settlement tracking is added, keep it minimal: immutable settlement record, exact currency/amount, included earnings identities, offline evidence/reference, and duplicate-settlement prevention
+- do not infer final-settlement threshold exemption from `updated_at`, domain release, monetization disablement, or current account status alone; termination-specific automation remains deferred until an authoritative termination fact exists
 - do not create another Worker or database for settlement unless separately approved; continue using the existing D1 sidecar and accounting writer where safe
 
 ---

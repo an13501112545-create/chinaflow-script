@@ -4,7 +4,7 @@
 
 Define the accounting and lifecycle facts that must exist before ChinaFlow creates a Publisher payout scheduling ledger.
 
-This foundation intentionally does **not** create payout batches, payment instructions, paid-state facts, bank/payment-provider records, FX conversions, or money movement.
+This foundation intentionally does **not** create payout batches, payment instructions, payment-provider integrations, beneficiary/KYC workflows, FX conversions, or money movement. Actual payment execution remains offline/manual.
 
 The durable accounting path is:
 
@@ -21,11 +21,11 @@ publisher_net_commission_revenue_entries
 publisher_earnings_entries
   -> append-only accrued Publisher earnings
 
-future payout scheduling ledger
-  -> eligibility / carry-forward / final-settlement obligation facts
+future manual settlement ledger
+  -> operator-confirmed payable / settled / carry-forward accounting facts
 
-future payment execution ledger
-  -> actual payment attempt / completion / failure facts
+offline payment
+  -> executed outside ChinaFlow (bank transfer / Wise / PayPal / other manual channel)
 ```
 
 ## Contractual basis
@@ -77,18 +77,19 @@ A payout scheduler therefore must not infer termination from:
 
 Before final-settlement threshold exemption can be implemented, ChinaFlow needs an authoritative, immutable relationship-termination fact with an effective timestamp.
 
-## Missing payment-readiness facts
+## Offline payment boundary
 
-The current Publisher model also has no authoritative ledger for:
+ChinaFlow does not need to execute Publisher payments in-product. Actual payout may be completed manually outside the platform using the operator's chosen payment channel.
 
-- payout destination / beneficiary details;
-- tax-document readiness;
-- KYB/KYC readiness;
-- sanctions/compliance holds;
-- payment-provider readiness;
-- payment execution attempts or completion.
+The system therefore does not need to model or automate:
 
-These facts are not required to recognize earnings, but they matter before executing payment. A payout scheduling layer must keep accounting eligibility separate from payment readiness and payment execution.
+- payout destination / beneficiary onboarding;
+- payment-provider integrations;
+- automated KYB/KYC payment gating;
+- bank/payment execution attempts;
+- transfer status webhooks.
+
+The minimum useful system responsibility is accounting control: know which accrued earnings remain unsettled and which earnings were included in a manually completed settlement, so the same earnings cannot be paid twice.
 
 ## Regular monthly payout threshold
 
@@ -132,7 +133,7 @@ Future payout scheduling facts should be append-only accounting decisions.
 
 Corrections should be represented by later adjustment facts, not destructive updates to earnings history.
 
-Actual payment attempts/completions belong in a separate payment execution ledger so that scheduling state is not rewritten into payment state.
+Actual money movement remains outside ChinaFlow. If settlement completion is recorded in-system, it should be an operator-confirmed accounting fact referencing the offline payment evidence, not a payment-execution workflow.
 
 ## Current implementation gate
 
@@ -143,5 +144,7 @@ The next safe engineering prerequisite is to model the Publisher relationship te
 1. recurring threshold / carry-forward semantics across terms versions;
 2. final-settlement threshold exemption;
 3. payout obligation grouping and due-date rules;
-4. payment-readiness / compliance-hold boundaries;
-5. the append-only payout scheduling schema.
+4. the minimal operator-confirmed manual settlement record;
+5. the append-only settlement accounting schema.
+
+Do not build a payment execution system unless separately approved later.
