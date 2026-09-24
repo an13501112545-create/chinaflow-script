@@ -70,7 +70,10 @@ function querySql(table, amountColumns, placementFiltered) {
   const periodColumn = table === "trip_bookings"
     ? "substr(order_date, 1, 7)"
     : "commission_month";
-  const sums = amountColumns.map(column => `SUM(${column}) AS ${column}`).join(",\n      ");
+  const sums = amountColumns.flatMap(column => [
+    `COUNT(${column}) AS ${column}_rows`,
+    `SUM(${column}) AS ${column}`
+  ]).join(",\n      ");
   return `SELECT attributed_placement AS placement, currency,
       COUNT(*) AS rows_count,
       ${sums}
@@ -100,7 +103,17 @@ function normalizeRows(rows, amountColumns) {
     const count = Number(row.rows_count);
     if (!Number.isSafeInteger(count) || count < 0) throw new Error("Invalid reporting aggregate result");
     const output = { placement: row.placement, currency: row.currency ?? null, rows: count };
-    for (const column of amountColumns) output[column] = integerOrNull(row[column]);
+    for (const column of amountColumns) {
+      const amountRows = Number(row[`${column}_rows`]);
+      if (!Number.isSafeInteger(amountRows) || amountRows < 0 || amountRows > count) {
+        throw new Error("Invalid reporting aggregate result");
+      }
+      output[`${column}_rows`] = amountRows;
+      output[column] = amountRows === 0 ? null : integerOrNull(row[column]);
+      if (amountRows > 0 && output[column] === null) {
+        throw new Error("Invalid reporting aggregate result");
+      }
+    }
     return output;
   });
 }
@@ -117,13 +130,19 @@ function totalsByCurrency(rows, amountColumns) {
     const key = row.currency === null ? "\u0000" : row.currency;
     if (!grouped.has(key)) {
       const initial = { currency: row.currency, rows: 0 };
-      for (const column of amountColumns) initial[column] = 0;
+      for (const column of amountColumns) {
+        initial[`${column}_rows`] = 0;
+        initial[column] = null;
+      }
       grouped.set(key, initial);
     }
     const total = grouped.get(key);
     total.rows = safeAdd(total.rows, row.rows);
     for (const column of amountColumns) {
-      if (row[column] !== null) total[column] = safeAdd(total[column], row[column]);
+      total[`${column}_rows`] = safeAdd(total[`${column}_rows`], row[`${column}_rows`]);
+      if (row[column] !== null) {
+        total[column] = total[column] === null ? row[column] : safeAdd(total[column], row[column]);
+      }
     }
   }
   return [...grouped.values()].sort((a, b) => String(a.currency ?? "").localeCompare(String(b.currency ?? "")));
@@ -162,6 +181,10 @@ export async function getPublisherReportingSummary(database, token, query) {
       reporting: {
         publisher_id: authorization.publisherId,
         period: { from: valid.from, to: valid.to },
+        period_basis: {
+          bookings: "order_date_month",
+          commissions: "commission_month"
+        },
         placement: valid.placement,
         bookings: {
           rows: bookingRows.reduce((sum, row) => sum + row.rows, 0),

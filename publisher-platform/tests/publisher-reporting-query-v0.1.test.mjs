@@ -37,7 +37,8 @@ function fixture(t) {
       ('b2','bk2','trip.com','o2','h2','p','pl-b','matched',2000000,'USD','2026-08-03','t','t','r','r','t','{}'),
       ('b3','bk3','trip.com','o3','h3','p','pl-a','matched',3000000,'CNY','2026-09-03','t','t','r','r','t','{}'),
       ('b4','bk4','trip.com','o4','h4','q','pl-a','matched',9000000,'USD','2026-08-02','t','t','r','r','t','{}'),
-      ('b5','bk5','trip.com','o5','h5',NULL,NULL,'unmatched',7000000,'USD','2026-08-02','t','t','r','r','t','{}');
+      ('b5','bk5','trip.com','o5','h5',NULL,NULL,'unmatched',7000000,'USD','2026-08-02','t','t','r','r','t','{}'),
+      ('b6','bk6','trip.com','o6','h6','p','pl-a','matched',NULL,'EUR','2026-08-10','t','t','r','r','t','{}');
     INSERT INTO trip_commissions(
       commission_fact_id,commission_record_key,source,source_order_id,source_row_hash,
       attributed_publisher_id,attributed_placement,attribution_status,
@@ -48,7 +49,8 @@ function fixture(t) {
       ('c1','ck1','trip.com','o1','ch1','p','pl-a','matched',1000000,100000,'USD','2026-08','t','t','r','r','t','{}'),
       ('c2','ck2','trip.com','o2','ch2','p','pl-b','matched',2000000,-50000,'USD','2026-08','t','t','r','r','t','{}'),
       ('c3','ck3','trip.com','o3','ch3','p','pl-a','matched',3000000,300000,'CNY','2026-09','t','t','r','r','t','{}'),
-      ('c4','ck4','trip.com','o4','ch4','q','pl-a','matched',9000000,900000,'USD','2026-08','t','t','r','r','t','{}');
+      ('c4','ck4','trip.com','o4','ch4','q','pl-a','matched',9000000,900000,'USD','2026-08','t','t','r','r','t','{}'),
+      ('c5','ck5','trip.com','o6','ch5','p','pl-a','matched',NULL,NULL,'EUR','2026-08','t','t','r','r','t','{}');
   `);
   const database = {
     prepare(sql) {
@@ -87,15 +89,18 @@ test("summary enforces session-derived publisher isolation and preserves currenc
   assert.equal(result.status, 200);
   const r = result.body.reporting;
   assert.equal(r.publisher_id, "p");
-  assert.equal(r.bookings.rows, 3);
+  assert.deepEqual(r.period_basis, {bookings:"order_date_month", commissions:"commission_month"});
+  assert.equal(r.bookings.rows, 4);
   assert.deepEqual(r.bookings.by_currency, [
-    { currency:"CNY", rows:1, booking_amount_micros:3000000 },
-    { currency:"USD", rows:2, booking_amount_micros:3000000 }
+    { currency:"CNY", rows:1, booking_amount_micros_rows:1, booking_amount_micros:3000000 },
+    { currency:"EUR", rows:1, booking_amount_micros_rows:0, booking_amount_micros:null },
+    { currency:"USD", rows:2, booking_amount_micros_rows:2, booking_amount_micros:3000000 }
   ]);
-  assert.equal(r.commissions.rows, 3);
+  assert.equal(r.commissions.rows, 4);
   assert.deepEqual(r.commissions.by_currency, [
-    { currency:"CNY", rows:1, booking_amount_micros:3000000, commission_amount_micros:300000 },
-    { currency:"USD", rows:2, booking_amount_micros:3000000, commission_amount_micros:50000 }
+    { currency:"CNY", rows:1, booking_amount_micros_rows:1, booking_amount_micros:3000000, commission_amount_micros_rows:1, commission_amount_micros:300000 },
+    { currency:"EUR", rows:1, booking_amount_micros_rows:0, booking_amount_micros:null, commission_amount_micros_rows:0, commission_amount_micros:null },
+    { currency:"USD", rows:2, booking_amount_micros_rows:2, booking_amount_micros:3000000, commission_amount_micros_rows:2, commission_amount_micros:50000 }
   ]);
   assert.ok(r.bookings.by_placement.every(row => ["pl-a","pl-b"].includes(row.placement)));
 });
@@ -106,8 +111,8 @@ test("placement filter is exact and cannot expose another publisher", async t =>
   const result = await getPublisherReportingSummary(f.database, session.token,
     { from:"2026-08", to:"2026-09", placement:"pl-a" });
   assert.equal(result.status, 200);
-  assert.equal(result.body.reporting.bookings.rows, 2);
-  assert.equal(result.body.reporting.commissions.rows, 2);
+  assert.equal(result.body.reporting.bookings.rows, 3);
+  assert.equal(result.body.reporting.commissions.rows, 3);
   assert.ok(result.body.reporting.bookings.by_placement.every(row => row.placement === "pl-a"));
   assert.ok(result.body.reporting.commissions.by_placement.every(row => row.placement === "pl-a"));
 });
@@ -171,7 +176,7 @@ test("reporting summary route enforces GET, same-origin reads, session auth and 
   assert.equal(ok.headers.get("Access-Control-Allow-Origin"), null);
   const body = await ok.json();
   assert.equal(body.reporting.publisher_id, "p");
-  assert.equal(body.reporting.bookings.rows, 3);
+  assert.equal(body.reporting.bookings.rows, 4);
   assert.ok(!JSON.stringify(body).includes("9000000"));
 });
 
