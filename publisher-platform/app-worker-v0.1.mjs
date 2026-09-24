@@ -915,6 +915,12 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
 </section>
 
 <div id="content" class="hidden">
+  <section class="card">
+    <h2>Commercial terms</h2>
+    <p class="fine-print">Commercial terms define the revenue share and settlement rules. They do not convert supplier-reported commission into Publisher earnings.</p>
+    <div id="commercial-terms-metrics" class="metric-grid"></div>
+  </section>
+
   <section class="grid">
     <div class="card">
       <h2>Bookings</h2>
@@ -943,6 +949,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
   const refreshButton = document.getElementById("refresh");
   const status = document.getElementById("status");
   const content = document.getElementById("content");
+  const commercialTermsMetrics = document.getElementById("commercial-terms-metrics");
   const bookingMetrics = document.getElementById("booking-metrics");
   const commissionMetrics = document.getElementById("commission-metrics");
   const placementTable = document.getElementById("placement-table");
@@ -971,6 +978,32 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
     const fraction = String(abs % 1000000n).padStart(6, "0").replace(/0+$/, "");
     return (negative ? "−" : "") + escapeHtml(currency ?? "") + " " +
       whole.toString() + (fraction ? "." + fraction : "");
+  }
+
+  function formatBps(value) {
+    if (!Number.isInteger(value)) return "—";
+    const whole = Math.trunc(value / 100);
+    const fraction = String(Math.abs(value % 100)).padStart(2, "0").replace(/0+$/, "");
+    return whole + (fraction ? "." + fraction : "") + "%";
+  }
+
+  function renderCommercialTerms(terms) {
+    if (!terms) {
+      commercialTermsMetrics.innerHTML = metric(
+        "Commercial terms", "Unavailable",
+        "No effective commercial terms are recorded for this account."
+      );
+      return;
+    }
+    const source = terms.terms_source === "account_specific"
+      ? "Account-specific terms"
+      : "Standard Publisher Terms";
+    commercialTermsMetrics.innerHTML =
+      metric("Publisher share", formatBps(terms.publisher_share_bps), "of Net Commission Revenue") +
+      metric("ChinaFlow share", formatBps(terms.chinaflow_share_bps), "of Net Commission Revenue") +
+      metric("Settlement", terms.settlement_currency + " · " + terms.settlement_cycle, source) +
+      metric("Minimum regular payout", formatMicros(terms.minimum_payout_micros, terms.settlement_currency), "Threshold does not forfeit accrued earnings") +
+      metric("Payment timing", "Within " + terms.payout_days_after_cycle_end + " days", "after the applicable monthly settlement cycle");
   }
 
   function completeness(rows, amountRows) {
@@ -1032,6 +1065,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
   }
 
   function render(reporting) {
+    renderCommercialTerms(reporting.commercial_terms);
     renderCurrencyMetrics(bookingMetrics, reporting.bookings, "booking_amount_micros", "Booking amount");
     renderCurrencyMetrics(commissionMetrics, reporting.commissions, "commission_amount_micros", "Supplier commission");
     renderPlacementTable(reporting);

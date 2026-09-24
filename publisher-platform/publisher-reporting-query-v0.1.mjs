@@ -148,6 +148,50 @@ function totalsByCurrency(rows, amountColumns) {
   return [...grouped.values()].sort((a, b) => String(a.currency ?? "").localeCompare(String(b.currency ?? "")));
 }
 
+function normalizeCommercialTerms(row) {
+  if (!row) return null;
+  const publisherShareBps = Number(row.publisher_share_bps);
+  const minimumPayoutMicros = Number(row.minimum_payout_micros);
+  const payoutDays = Number(row.payout_days_after_cycle_end);
+  if (
+    !["standard_terms", "account_specific"].includes(row.terms_source) ||
+    typeof row.terms_reference !== "string" || !row.terms_reference ||
+    !Number.isSafeInteger(publisherShareBps) || publisherShareBps < 0 || publisherShareBps > 10000 ||
+    typeof row.settlement_currency !== "string" || !/^[A-Z]{3}$/.test(row.settlement_currency) ||
+    !Number.isSafeInteger(minimumPayoutMicros) || minimumPayoutMicros < 0 ||
+    row.settlement_cycle !== "monthly" ||
+    !Number.isSafeInteger(payoutDays) || payoutDays < 0 || payoutDays > 365 ||
+    typeof row.effective_from !== "string" || !row.effective_from
+  ) {
+    throw new Error("Invalid commercial terms result");
+  }
+  return {
+    terms_source: row.terms_source,
+    terms_reference: row.terms_reference,
+    publisher_share_bps: publisherShareBps,
+    chinaflow_share_bps: 10000 - publisherShareBps,
+    settlement_currency: row.settlement_currency,
+    minimum_payout_micros: minimumPayoutMicros,
+    settlement_cycle: row.settlement_cycle,
+    payout_days_after_cycle_end: payoutDays,
+    effective_from: row.effective_from
+  };
+}
+
+async function loadCommercialTerms(database, publisherId) {
+  const row = await database.prepare(`
+    SELECT
+      terms_source,terms_reference,publisher_share_bps,settlement_currency,
+      minimum_payout_micros,settlement_cycle,payout_days_after_cycle_end,effective_from
+    FROM publisher_commercial_terms
+    WHERE publisher_id = ?
+      AND julianday(effective_from) <= julianday('now')
+    ORDER BY julianday(effective_from) DESC, created_at DESC, commercial_terms_id DESC
+    LIMIT 1
+  `).bind(publisherId).first();
+  return normalizeCommercialTerms(row);
+}
+
 async function loadAggregate(database, publisherId, query, table, amountColumns) {
   const sql = querySql(table, amountColumns, query.placement !== null);
   const statement = database.prepare(sql);
@@ -167,6 +211,7 @@ export async function getPublisherReportingSummary(database, token, query) {
   const authorization = await resolvePublisher(database, session);
   if (authorization.status) return authorization;
 
+  const commercialTerms = await loadCommercialTerms(database, authorization.publisherId);
   const bookingRows = await loadAggregate(
     database, authorization.publisherId, valid, "trip_bookings", ["booking_amount_micros"]
   );
@@ -186,6 +231,7 @@ export async function getPublisherReportingSummary(database, token, query) {
           commissions: "commission_month"
         },
         placement: valid.placement,
+        commercial_terms: commercialTerms,
         bookings: {
           rows: bookingRows.reduce((sum, row) => sum + row.rows, 0),
           by_currency: totalsByCurrency(bookingRows, ["booking_amount_micros"]),

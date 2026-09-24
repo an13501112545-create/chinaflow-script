@@ -26,6 +26,12 @@ function fixture(t) {
       ('p','p','Publisher','active'),('q','q','Other','active');
     INSERT INTO publisher_memberships(membership_id,publisher_id,user_id,role,membership_status) VALUES
       ('m','p','u','owner','active'),('m2','q','u2','owner','active');
+    INSERT INTO publisher_commercial_terms(
+      commercial_terms_id,publisher_id,terms_source,terms_reference,publisher_share_bps,
+      settlement_currency,minimum_payout_micros,settlement_cycle,payout_days_after_cycle_end,effective_from
+    ) VALUES
+      ('pct-p','p','standard_terms','chinaflow-publisher-terms-v1',7000,'USD',100000000,'monthly',30,'2020-01-01 00:00:00'),
+      ('pct-p-future','p','account_specific','future-agreement',6000,'USD',50000000,'monthly',15,'2099-01-01 00:00:00');
     INSERT INTO trip_bookings(
       booking_fact_id,source_record_key,source,source_order_id,source_row_hash,
       attributed_publisher_id,attributed_placement,attribution_status,
@@ -89,6 +95,17 @@ test("summary enforces session-derived publisher isolation and preserves currenc
   assert.equal(result.status, 200);
   const r = result.body.reporting;
   assert.equal(r.publisher_id, "p");
+  assert.deepEqual(r.commercial_terms, {
+    terms_source:"standard_terms",
+    terms_reference:"chinaflow-publisher-terms-v1",
+    publisher_share_bps:7000,
+    chinaflow_share_bps:3000,
+    settlement_currency:"USD",
+    minimum_payout_micros:100000000,
+    settlement_cycle:"monthly",
+    payout_days_after_cycle_end:30,
+    effective_from:"2020-01-01 00:00:00"
+  });
   assert.deepEqual(r.period_basis, {bookings:"order_date_month", commissions:"commission_month"});
   assert.equal(r.bookings.rows, 4);
   assert.deepEqual(r.bookings.by_currency, [
@@ -126,6 +143,16 @@ test("invalid session and ambiguous active memberships fail closed", async t => 
     {from:"2026-08",to:"2026-09",placement:null});
   assert.equal(result.status, 409);
   assert.deepEqual(result.body, {error:"conflict"});
+});
+
+test("publisher with no commercial terms receives null instead of inferred defaults", async t => {
+  const f = fixture(t);
+  const session = await createSession(f.database, "u2");
+  const result = await getPublisherReportingSummary(f.database, session.token,
+    {from:"2026-08",to:"2026-09",placement:null});
+  assert.equal(result.status, 200);
+  assert.equal(result.body.reporting.publisher_id, "q");
+  assert.equal(result.body.reporting.commercial_terms, null);
 });
 
 test("reporting SQL always authorizes by attributed_publisher_id before period or placement", () => {
@@ -240,6 +267,9 @@ test("reporting page serves same-origin UI and rejects non-GET methods", async (
   assert.match(response.headers.get("Content-Security-Policy"), /connect-src 'self'/);
   const body = await response.text();
   assert.match(body, /Publisher reporting/);
+  assert.match(body, /Commercial terms/);
+  assert.match(body, /commercial-terms-metrics/);
+  assert.match(body, /do not convert supplier-reported commission into Publisher earnings/);
   assert.match(body, /\/api\/auth\/session/);
   assert.match(body, /\/api\/reporting\/summary\?/);
   assert.match(body, /Booking amount/);
