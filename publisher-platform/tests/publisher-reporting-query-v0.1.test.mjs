@@ -193,7 +193,7 @@ test("service rejects reversed or oversized ranges even when called without rout
   }
 });
 
-test("reporting query rollout gate is exact and enabled only in TEST", async () => {
+test("reporting query rollout gate is exact and enabled in TEST and Production", async () => {
   assert.equal(publisherReportingQueryEnabled({PUBLISHER_REPORTING_QUERY_ENABLED:"true"}), true);
   for (const value of [undefined,null,"","false","TRUE",true,1]) {
     assert.equal(publisherReportingQueryEnabled({PUBLISHER_REPORTING_QUERY_ENABLED:value}), false);
@@ -201,7 +201,7 @@ test("reporting query rollout gate is exact and enabled only in TEST", async () 
   const testConfig = JSON.parse(readFileSync(new URL("../../wrangler.publisher-app.test.jsonc", import.meta.url), "utf8"));
   const prodConfig = JSON.parse(readFileSync(new URL("../../wrangler.publisher-app.production.jsonc", import.meta.url), "utf8"));
   assert.equal(testConfig.vars.PUBLISHER_REPORTING_QUERY_ENABLED, "true");
-  assert.equal(prodConfig.vars.PUBLISHER_REPORTING_QUERY_ENABLED, "false");
+  assert.equal(prodConfig.vars.PUBLISHER_REPORTING_QUERY_ENABLED, "true");
 });
 
 test("dark reporting route returns 404 before D1 access", async () => {
