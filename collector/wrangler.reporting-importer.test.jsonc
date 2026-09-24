@@ -12,7 +12,11 @@
   ],
   "secrets": {
     "required": [
-      "CHINAFLOW_REPORTING_IMPORT_TOKEN"
+      "CHINAFLOW_REPORTING_IMPORT_TOKEN",
+      "CHINAFLOW_RECONCILIATION_API_TOKEN"
     ]
+  },
+  "vars": {
+    "PUBLISHER_RECONCILIATION_WRITER_ENABLED": "false"
   }
 }

@@ -2100,7 +2100,10 @@ test(
 
       assert.deepEqual(
         config.secrets?.required,
-        ["CHINAFLOW_REPORTING_IMPORT_TOKEN"]
+        [
+          "CHINAFLOW_REPORTING_IMPORT_TOKEN",
+          "CHINAFLOW_RECONCILIATION_API_TOKEN"
+        ]
       );
     }
   }
