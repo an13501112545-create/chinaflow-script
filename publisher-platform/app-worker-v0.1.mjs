@@ -12,6 +12,11 @@ import {
   readOwnerReleaseInput,
   releasePublisherHostname
 } from "./publisher-domain-claim-mutations-v0.1.mjs";
+import {
+  publisherReportingQueryEnabled,
+  parsePublisherReportingQuery,
+  getPublisherReportingSummary
+} from "./publisher-reporting-query-v0.1.mjs";
 
 function requireAppOrigin(env) {
   const value = env?.APP_ORIGIN;
@@ -110,6 +115,7 @@ const PUBLISHER_TERMS_ROUTE = "/legal/chinaflow-publisher-terms-v1";
 const ONBOARDING_ROUTE = "/onboarding";
 const VERIFY_INSTALL_ROUTE = "/api/onboarding/verify-install";
 const RELEASE_HOSTNAME_ROUTE = "/api/onboarding/release-hostname";
+const REPORTING_SUMMARY_ROUTE = "/api/reporting/summary";
 const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 const TURNSTILE_ACTION = "publisher_magic_link";
 const TURNSTILE_SITE_KEY_PLACEHOLDER =
@@ -831,6 +837,25 @@ a{color:#0b7285}
 </main>
 </body>
 </html>`);
+  }
+
+  if (url.pathname === REPORTING_SUMMARY_ROUTE) {
+    if (!publisherReportingQueryEnabled(env)) {
+      return json(404, { error: "not_found" });
+    }
+    if (request.method !== "GET") {
+      return json(405, { error: "method_not_allowed" }, { "Allow": "GET" });
+    }
+    const origin = request.headers.get("Origin");
+    if (origin !== null && origin !== requireAppOrigin(env)) {
+      return json(403, { error: "forbidden" });
+    }
+    const token = readSessionCookie(request.headers.get("Cookie"));
+    if (!token) return json(401, { error: "unauthenticated" });
+    const query = parsePublisherReportingQuery(url.searchParams);
+    if (!query) return json(400, { error: "invalid_input" });
+    const result = await getPublisherReportingSummary(env?.CHINAFLOW_EVENTS, token, query);
+    return json(result.status, result.body);
   }
 
   if (url.pathname === RELEASE_HOSTNAME_ROUTE) {
