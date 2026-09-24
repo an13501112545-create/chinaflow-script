@@ -697,18 +697,27 @@ When validation fails, stop and report the failure before modifying additional f
 - no Publisher earnings, FX conversion, payout amount, or payment obligation is inferred from Supplier commission status or amount
 - the internal reconciliation writer is live in TEST and Production on the existing Reporting Importer Worker and uses an authorization secret separate from `CHINAFLOW_REPORTING_IMPORT_TOKEN`
 - TEST reconciliation acceptance has created one synthetic Approved Commission decision and one synthetic Net Commission Revenue entry with exact-retry idempotency; the fixture is explicitly TEST-only
-- Production currently has zero `trip_commissions`, zero reconciliation rows, and zero Net Commission Revenue rows
+- Production currently has zero `trip_commissions`, zero reconciliation rows, zero Net Commission Revenue rows, and zero Publisher earnings rows
 - Production reconciliation enablement has been accepted only at the authorization/boundary level; no synthetic financial facts are created in Production
+- migration `0014_publisher_earnings_v1.sql` is live in TEST and Production
+- `publisher_earnings_entries` is an append-only accrued-earnings ledger and is created only from a specific Net Commission Revenue row plus the effective commercial-terms version
+- the internal Publisher earnings writer is live in TEST and Production on the existing Reporting Importer Worker and reuses the isolated reconciliation/accounting authorization secret
+- same-currency exact-micros earnings are supported; cross-currency earnings fail closed and no FX rate is invented
+- TEST earnings acceptance has created one explicitly synthetic CNY earnings row: CNY 5,000,000 micros Net Commission Revenue × 70% = CNY 3,500,000 micros, with exact-retry idempotency
+- Production earnings enablement has been accepted only at the authorization/boundary level; Production still contains zero earnings facts
+- the session-isolated Publisher Reporting Query Layer and `/reporting` UI expose confirmed accrued Publisher earnings separately from Supplier commission; the UI explicitly does not label earnings as payout or paid status
+- payout scheduling is not implemented; `publishers.account_status='closed'` has no immutable termination effective timestamp, so final-settlement threshold exemption cannot yet be applied safely
+- `collector/publisher-payout-scheduling-foundation-v0.1.md` defines the current payout-layer prerequisites and blockers
 
 Next approved engineering direction:
 
 - keep real Trip.com parser mapping deferred until a real booking/commission export exists
 - when a real export becomes available, follow `collector/trip-export-parser-acceptance-v0.1.md` and do not invent source columns
-- build the internal reconciliation writer on the existing Reporting Importer Worker; use authorization separate from `CHINAFLOW_REPORTING_IMPORT_TOKEN`, strict idempotency, and no Publisher-facing mutation surface
-- do not calculate Publisher earnings from `trip_commissions.commission_amount_micros` alone and do not apply the 70% share until commission has become Approved Commission and the corresponding Net Commission Revenue has been actually received and retained by ChinaFlow
-- preserve source currency and actual settlement/reconciliation evidence; do not invent FX conversion or USD earnings without an authoritative rate/settlement fact
-- only after reconciled Net Commission Revenue exists may a settlement layer calculate Publisher earnings from the effective commercial-terms version
-- do not create another Worker or database for reconciliation unless separately approved; use the existing D1 sidecar unless a concrete requirement proves otherwise
+- preserve source currency and actual settlement/reconciliation evidence; do not invent FX conversion or USD earnings without an authoritative conversion fact
+- before implementing payout scheduling, model an authoritative immutable Publisher relationship-termination fact with an effective timestamp; do not infer termination from `updated_at`, domain release, monetization disablement, or current account status alone
+- after the termination fact exists, define recurring threshold/carry-forward semantics across commercial-terms versions and the final-settlement threshold exemption before creating a payout scheduling migration
+- keep payout scheduling separate from payment execution, KYB/KYC/payment-readiness facts, and actual paid-state records
+- do not create another Worker or database for settlement unless separately approved; continue using the existing D1 sidecar and accounting writer where safe
 
 ---
 
