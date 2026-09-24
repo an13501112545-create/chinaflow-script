@@ -204,12 +204,11 @@ test("earnings route creates and retries without exposing finance secret", async
   assert.deepEqual(await retry.json(),{publisher_earnings:{publisher_earnings_entry_id:"earn_1",created:false}});
 });
 
-test("reporting importer configs enable earnings writer only in TEST without adding another secret", () => {
+test("reporting importer configs enable earnings writer in TEST and Production without adding another secret", () => {
   for (const file of ["../wrangler.reporting-importer.test.jsonc","../wrangler.reporting-importer.production.jsonc"]) {
     const config=JSON.parse(readFileSync(new URL(file,import.meta.url),"utf8"));
     assert.equal(config.vars.PUBLISHER_RECONCILIATION_WRITER_ENABLED,"true");
-    const expected = file.includes(".test.") ? "true" : "false";
-    assert.equal(config.vars.PUBLISHER_EARNINGS_WRITER_ENABLED,expected);
+    assert.equal(config.vars.PUBLISHER_EARNINGS_WRITER_ENABLED,"true");
     assert.deepEqual(
       config.secrets.required,
       ["CHINAFLOW_REPORTING_IMPORT_TOKEN","CHINAFLOW_RECONCILIATION_API_TOKEN"]
