@@ -674,18 +674,21 @@ When validation fails, stop and report the failure before modifying additional f
 - Publisher Reporting migration 0002 has been applied
 - publisher placement seeds exist for production and test
 - reporting importer deterministic core exists
-- row normalization, deterministic identity, money micros, source-row hashing, batch duplicate detection, source-file hashing, ingestion preflight, and mixed trip_sub1 attribution are implemented and tested
-- no Reporting Importer Worker has been deployed yet
-- real Trip.com export parser is NOT yet accepted because a real booking/export file is not yet available
+- row normalization, deterministic identity, money micros, source-row hashing, batch duplicate detection, source-file hashing, ingestion preflight, mixed trip_sub1 attribution, source-file dedupe, D1 placement lookup, insert/update/unchanged planning, and atomic D1 persistence are implemented and tested
+- the separate internal Reporting Importer Worker is deployed in TEST and Production
+- TEST and Production Reporting Importer Workers both use an isolated `CHINAFLOW_REPORTING_IMPORT_TOKEN`; Wrangler configs require that secret
+- TEST has prior importer acceptance data; Production currently has no booking/commission ingestion facts
+- the Reporting Importer Worker accepts authenticated multipart input containing the original file bytes plus caller-prepared `rows_json`; it does not parse raw Trip.com CSV/XLSX files itself
+- real Trip.com export parser acceptance is still blocked because no real booking/commission export file is available in the repository, Project/Library files, or connected Google Drive
 
 Next approved engineering direction:
 
-- strengthen ingestion preflight validation
-- source-file dedupe
-- D1 placement lookup
-- insert/update/unchanged planning
-- atomic D1 persistence
-- then a separate internal Reporting Importer Worker
+- obtain at least one real Trip.com booking export and one real Trip.com commission export (or the actual combined export format, if that is what Trip.com provides)
+- inspect the real headers, encodings, date/amount/status representations, and file format without inventing missing fields
+- implement the smallest parser/adapter that converts the real export into the existing normalized importer row contract
+- validate parser output against the existing deterministic preflight, attribution, dedupe, planning, and atomic persistence pipeline in TEST
+- only after TEST acceptance, run the first guarded Production ingestion
+- do not create another Worker, database, or reporting data model for parsing unless separately approved
 
 ---
 
