@@ -690,12 +690,17 @@ When validation fails, stop and report the failure before modifying additional f
 - the formal Production publisher has exactly one standard commercial-terms version effective from its original v1 Terms acceptance; TEST historical `test-v1` data is not silently mapped to official standard terms
 - reporting exposes current effective commercial terms, but does not calculate Publisher earnings
 - real Trip.com export parser acceptance is deferred until the first real booking/commission export exists; absence of a real export does not block the Query Layer or other reporting engineering
+- migration `0013_publisher_net_commission_revenue_v1.sql` is live in TEST and Production
+- `publisher_commission_reconciliations` is the append-only Approved Commission decision layer and snapshots the exact matched Supplier commission fact plus Publisher/placement identity
+- `publisher_net_commission_revenue_entries` is the append-only actual received/retained Net Commission Revenue ledger; signed adjustments are preserved and currency is explicit
+- neither reconciliation nor Net Commission Revenue rows are auto-created from Supplier facts
+- no Publisher earnings, FX conversion, payout amount, or payment obligation is inferred from Supplier commission status or amount
 
 Next approved engineering direction:
 
 - keep real Trip.com parser mapping deferred until a real booking/commission export exists
 - when a real export becomes available, follow `collector/trip-export-parser-acceptance-v0.1.md` and do not invent source columns
-- establish a separate append-only reconciliation layer for Approved Commission and Net Commission Revenue; do not mutate Supplier booking/commission facts to represent reconciliation
+- build the internal reconciliation writer on the existing Reporting Importer Worker; use authorization separate from `CHINAFLOW_REPORTING_IMPORT_TOKEN`, strict idempotency, and no Publisher-facing mutation surface
 - do not calculate Publisher earnings from `trip_commissions.commission_amount_micros` alone and do not apply the 70% share until commission has become Approved Commission and the corresponding Net Commission Revenue has been actually received and retained by ChinaFlow
 - preserve source currency and actual settlement/reconciliation evidence; do not invent FX conversion or USD earnings without an authoritative rate/settlement fact
 - only after reconciled Net Commission Revenue exists may a settlement layer calculate Publisher earnings from the effective commercial-terms version
@@ -721,11 +726,14 @@ trip_commissions
 publisher_commercial_terms
 → append-only publisher share / settlement rules
 
-future reconciliation facts
-→ Approved Commission / Net Commission Revenue evidence
+publisher_commission_reconciliations
+→ append-only Approved Commission decisions over Supplier facts
+
+publisher_net_commission_revenue_entries
+→ append-only actual received/retained Net Commission Revenue facts
 
 future settlement facts
-→ Publisher earnings / payout ledger
+→ Publisher earnings / payout ledger after authoritative FX where required
 
 Attribution:
 
