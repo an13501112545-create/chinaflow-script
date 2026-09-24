@@ -76,20 +76,18 @@ CREATE INDEX ix_publisher_commission_reconciliation_publisher
 CREATE TRIGGER tr_publisher_commission_reconciliation_validate_fact
 BEFORE INSERT ON publisher_commission_reconciliations
 BEGIN
-    SELECT CASE
-        WHEN NOT EXISTS (
-            SELECT 1
-            FROM trip_commissions c
-            WHERE c.commission_fact_id = NEW.commission_fact_id
-              AND c.commission_record_key = NEW.commission_record_key
-              AND c.attribution_status = 'matched'
-              AND c.attributed_publisher_id = NEW.publisher_id
-              AND c.attributed_placement = NEW.attributed_placement
-              AND c.commission_amount_micros IS NEW.supplier_commission_amount_micros_snapshot
-              AND c.currency IS NEW.supplier_currency_snapshot
-        )
-        THEN RAISE(ABORT, 'invalid commission reconciliation fact snapshot')
-    END;
+    SELECT RAISE(ABORT, 'invalid commission reconciliation fact snapshot')
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM trip_commissions c
+        WHERE c.commission_fact_id = NEW.commission_fact_id
+          AND c.commission_record_key = NEW.commission_record_key
+          AND c.attribution_status = 'matched'
+          AND c.attributed_publisher_id = NEW.publisher_id
+          AND c.attributed_placement = NEW.attributed_placement
+          AND c.commission_amount_micros IS NEW.supplier_commission_amount_micros_snapshot
+          AND c.currency IS NEW.supplier_currency_snapshot
+    );
 END;
 
 CREATE TRIGGER tr_publisher_commission_reconciliation_no_update
@@ -173,35 +171,33 @@ CREATE INDEX ix_publisher_net_commission_revenue_reconciliation
 CREATE TRIGGER tr_publisher_net_commission_revenue_validate_approval
 BEFORE INSERT ON publisher_net_commission_revenue_entries
 BEGIN
-    SELECT CASE
-        WHEN NOT EXISTS (
-            SELECT 1
-            FROM publisher_commission_reconciliations r
-            WHERE r.reconciliation_id = NEW.reconciliation_id
-              AND r.publisher_id = NEW.publisher_id
-              AND r.commission_fact_id = NEW.commission_fact_id
-              AND r.attributed_placement = NEW.attributed_placement
-              AND r.decision = 'approved'
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM publisher_commission_reconciliations newer
-                  WHERE newer.commission_fact_id = r.commission_fact_id
-                    AND (
-                        julianday(newer.effective_at) > julianday(r.effective_at)
-                        OR (
-                            julianday(newer.effective_at) = julianday(r.effective_at)
-                            AND newer.created_at > r.created_at
-                        )
-                        OR (
-                            julianday(newer.effective_at) = julianday(r.effective_at)
-                            AND newer.created_at = r.created_at
-                            AND newer.reconciliation_id > r.reconciliation_id
-                        )
+    SELECT RAISE(ABORT, 'net commission revenue requires latest approved reconciliation')
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM publisher_commission_reconciliations r
+        WHERE r.reconciliation_id = NEW.reconciliation_id
+          AND r.publisher_id = NEW.publisher_id
+          AND r.commission_fact_id = NEW.commission_fact_id
+          AND r.attributed_placement = NEW.attributed_placement
+          AND r.decision = 'approved'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM publisher_commission_reconciliations newer
+              WHERE newer.commission_fact_id = r.commission_fact_id
+                AND (
+                    julianday(newer.effective_at) > julianday(r.effective_at)
+                    OR (
+                        julianday(newer.effective_at) = julianday(r.effective_at)
+                        AND newer.created_at > r.created_at
                     )
-              )
-        )
-        THEN RAISE(ABORT, 'net commission revenue requires latest approved reconciliation')
-    END;
+                    OR (
+                        julianday(newer.effective_at) = julianday(r.effective_at)
+                        AND newer.created_at = r.created_at
+                        AND newer.reconciliation_id > r.reconciliation_id
+                    )
+                )
+          )
+    );
 END;
 
 CREATE TRIGGER tr_publisher_net_commission_revenue_no_update
