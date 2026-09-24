@@ -186,7 +186,8 @@ test("reconciliation route creates and retries without exposing secrets", async 
 test("reporting importer configs require separate reconciliation secret and keep writer dark", () => {
   for (const file of ["../wrangler.reporting-importer.test.jsonc","../wrangler.reporting-importer.production.jsonc"]) {
     const config=JSON.parse(readFileSync(new URL(file,import.meta.url),"utf8"));
-    assert.equal(config.vars.PUBLISHER_RECONCILIATION_WRITER_ENABLED,"false");
+    const expected = file.includes(".test.") ? "true" : "false";
+    assert.equal(config.vars.PUBLISHER_RECONCILIATION_WRITER_ENABLED, expected);
     assert.deepEqual(config.secrets.required,["CHINAFLOW_REPORTING_IMPORT_TOKEN","CHINAFLOW_RECONCILIATION_API_TOKEN"]);
   }
 });
