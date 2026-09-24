@@ -899,7 +899,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
 <div class="topbar">
   <div>
     <h1>Publisher reporting</h1>
-    <p>Bookings and supplier-reported commission facts attributed to your ChinaFlow publisher account.</p>
+    <p>Bookings, supplier-reported commission, and confirmed Publisher earnings attributed to your ChinaFlow publisher account.</p>
   </div>
   <a href="/onboarding">Publisher settings</a>
 </div>
@@ -934,6 +934,12 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
   </section>
 
   <section class="card">
+    <h2>Confirmed Publisher earnings</h2>
+    <p class="fine-print">These are accrued Publisher earnings recognized from Approved Commission included in Net Commission Revenue under your effective commercial terms. They are not a payout record and do not mean funds have been paid.</p>
+    <div id="earnings-metrics" class="metric-grid"></div>
+  </section>
+
+  <section class="card">
     <h2>Placement breakdown</h2>
     <p id="period-basis"></p>
     <div id="placement-table"></div>
@@ -952,6 +958,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
   const commercialTermsMetrics = document.getElementById("commercial-terms-metrics");
   const bookingMetrics = document.getElementById("booking-metrics");
   const commissionMetrics = document.getElementById("commission-metrics");
+  const earningsMetrics = document.getElementById("earnings-metrics");
   const placementTable = document.getElementById("placement-table");
   const periodBasis = document.getElementById("period-basis");
 
@@ -1040,28 +1047,34 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
   function renderPlacementTable(reporting) {
     const bookings = reporting.bookings?.by_placement ?? [];
     const commissions = reporting.commissions?.by_placement ?? [];
+    const earnings = reporting.earnings?.by_placement ?? [];
     const keys = new Set();
     for (const row of bookings) keys.add(row.placement + "\u0000" + (row.currency ?? ""));
     for (const row of commissions) keys.add(row.placement + "\u0000" + (row.currency ?? ""));
+    for (const row of earnings) keys.add(row.placement + "\u0000" + (row.currency ?? ""));
     if (!keys.size) {
       placementTable.innerHTML = '<div class="empty">No attributed facts for this period.</div>';
       return;
     }
     const bookingMap = new Map(bookings.map(row => [row.placement + "\u0000" + (row.currency ?? ""), row]));
     const commissionMap = new Map(commissions.map(row => [row.placement + "\u0000" + (row.currency ?? ""), row]));
+    const earningsMap = new Map(earnings.map(row => [row.placement + "\u0000" + (row.currency ?? ""), row]));
     const rows = [...keys].sort().map(key => {
       const [placement, currency] = key.split("\u0000");
       const b = bookingMap.get(key);
       const c = commissionMap.get(key);
+      const e = earningsMap.get(key);
       const currencyValue = currency || null;
       return '<tr><td><span class="badge">' + escapeHtml(placement) + '</span></td>' +
         '<td>' + escapeHtml(currency || "—") + '</td>' +
         '<td class="number">' + String(b?.rows ?? 0) + '</td>' +
         '<td class="number">' + formatMicros(b?.booking_amount_micros ?? null, currencyValue) + '</td>' +
         '<td class="number">' + String(c?.rows ?? 0) + '</td>' +
-        '<td class="number">' + formatMicros(c?.commission_amount_micros ?? null, currencyValue) + '</td></tr>';
+        '<td class="number">' + formatMicros(c?.commission_amount_micros ?? null, currencyValue) + '</td>' +
+        '<td class="number">' + String(e?.rows ?? 0) + '</td>' +
+        '<td class="number">' + formatMicros(e?.publisher_earnings_micros ?? null, currencyValue) + '</td></tr>';
     }).join("");
-    placementTable.innerHTML = '<table><thead><tr><th>Placement</th><th>Currency</th><th class="number">Bookings</th><th class="number">Booking amount</th><th class="number">Supplier commission facts</th><th class="number">Supplier commission</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    placementTable.innerHTML = '<table><thead><tr><th>Placement</th><th>Currency</th><th class="number">Bookings</th><th class="number">Booking amount</th><th class="number">Supplier commission facts</th><th class="number">Supplier commission</th><th class="number">Earnings entries</th><th class="number">Confirmed earnings</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   function render(reporting) {

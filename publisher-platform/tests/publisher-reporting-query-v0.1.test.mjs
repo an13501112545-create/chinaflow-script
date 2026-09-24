@@ -57,6 +57,24 @@ function fixture(t) {
       ('c3','ck3','trip.com','o3','ch3','p','pl-a','matched',3000000,300000,'CNY','2026-09','t','t','r','r','t','{}'),
       ('c4','ck4','trip.com','o4','ch4','q','pl-a','matched',9000000,900000,'USD','2026-08','t','t','r','r','t','{}'),
       ('c5','ck5','trip.com','o6','ch5','p','pl-a','matched',NULL,NULL,'EUR','2026-08','t','t','r','r','t','{}');
+    INSERT INTO publisher_commission_reconciliations(
+      reconciliation_id,commission_fact_id,commission_record_key,publisher_id,attributed_placement,
+      decision,supplier_commission_amount_micros_snapshot,supplier_currency_snapshot,
+      approved_commission_micros,approved_currency,evidence_reference,effective_at
+    ) VALUES
+      ('rec-e1','c1','ck1','p','pl-a','approved',100000,'USD',100000,'USD','earnings-review-1','2026-08-05 00:00:00');
+    INSERT INTO publisher_net_commission_revenue_entries(
+      net_commission_entry_id,reconciliation_id,commission_fact_id,publisher_id,attributed_placement,
+      evidence_type,evidence_reference,currency,net_commission_revenue_micros,effective_at
+    ) VALUES
+      ('ncr-e1','rec-e1','c1','p','pl-a','supplier_settlement','earnings-settlement-1','USD',100000,'2026-08-10 00:00:00');
+    INSERT INTO publisher_earnings_entries(
+      publisher_earnings_entry_id,net_commission_entry_id,reconciliation_id,commission_fact_id,
+      publisher_id,attributed_placement,commercial_terms_id,net_commission_revenue_currency,
+      net_commission_revenue_micros,publisher_share_bps,earnings_currency,publisher_earnings_micros,
+      settlement_cycle_month,effective_at
+    ) VALUES
+      ('earn-e1','ncr-e1','rec-e1','c1','p','pl-a','pct-p','USD',100000,7000,'USD',70000,'2026-08','2026-08-10 00:00:00');
   `);
   const database = {
     prepare(sql) {
@@ -106,7 +124,7 @@ test("summary enforces session-derived publisher isolation and preserves currenc
     payout_days_after_cycle_end:30,
     effective_from:"2020-01-01 00:00:00"
   });
-  assert.deepEqual(r.period_basis, {bookings:"order_date_month", commissions:"commission_month"});
+  assert.deepEqual(r.period_basis, {bookings:"order_date_month", commissions:"commission_month", earnings:"settlement_cycle_month"});
   assert.equal(r.bookings.rows, 4);
   assert.deepEqual(r.bookings.by_currency, [
     { currency:"CNY", rows:1, booking_amount_micros_rows:1, booking_amount_micros:3000000 },
@@ -119,6 +137,13 @@ test("summary enforces session-derived publisher isolation and preserves currenc
     { currency:"EUR", rows:1, booking_amount_micros_rows:0, booking_amount_micros:null, commission_amount_micros_rows:0, commission_amount_micros:null },
     { currency:"USD", rows:2, booking_amount_micros_rows:2, booking_amount_micros:3000000, commission_amount_micros_rows:2, commission_amount_micros:50000 }
   ]);
+  assert.equal(r.earnings.rows, 1);
+  assert.deepEqual(r.earnings.by_currency, [
+    { currency:"USD", rows:1, publisher_earnings_micros_rows:1, publisher_earnings_micros:70000 }
+  ]);
+  assert.deepEqual(r.earnings.by_placement, [
+    { placement:"pl-a", currency:"USD", rows:1, publisher_earnings_micros_rows:1, publisher_earnings_micros:70000 }
+  ]);
   assert.ok(r.bookings.by_placement.every(row => ["pl-a","pl-b"].includes(row.placement)));
 });
 
@@ -130,6 +155,8 @@ test("placement filter is exact and cannot expose another publisher", async t =>
   assert.equal(result.status, 200);
   assert.equal(result.body.reporting.bookings.rows, 3);
   assert.equal(result.body.reporting.commissions.rows, 3);
+  assert.equal(result.body.reporting.earnings.rows, 1);
+  assert.ok(result.body.reporting.earnings.by_placement.every(row => row.placement === "pl-a"));
   assert.ok(result.body.reporting.bookings.by_placement.every(row => row.placement === "pl-a"));
   assert.ok(result.body.reporting.commissions.by_placement.every(row => row.placement === "pl-a"));
 });
@@ -158,6 +185,7 @@ test("publisher with no commercial terms receives null instead of inferred defau
 test("reporting SQL always authorizes by attributed_publisher_id before period or placement", () => {
   const source = readFileSync(new URL("../publisher-reporting-query-v0.1.mjs", import.meta.url), "utf8");
   assert.match(source, /WHERE attributed_publisher_id = \?1/);
+  assert.match(source, /FROM publisher_earnings_entries[\s\S]*WHERE publisher_id = \?1/);
   assert.doesNotMatch(source, /WHERE\s+trip_sub1\s*=/i);
 });
 
@@ -204,6 +232,7 @@ test("reporting summary route enforces GET, same-origin reads, session auth and 
   const body = await ok.json();
   assert.equal(body.reporting.publisher_id, "p");
   assert.equal(body.reporting.bookings.rows, 4);
+  assert.equal(body.reporting.earnings.rows, 1);
   assert.ok(!JSON.stringify(body).includes("9000000"));
 });
 
@@ -275,11 +304,17 @@ test("reporting page serves same-origin UI and rejects non-GET methods", async (
   assert.match(body, /Booking amount/);
   assert.match(body, /Supplier commission reporting/);
   assert.match(body, /Supplier-reported commission is not Publisher earnings/);
+  assert.match(body, /Confirmed Publisher earnings/);
+  assert.match(body, /accrued Publisher earnings recognized from Approved Commission/);
+  assert.match(body, /not a payout record/);
+  assert.match(body, /earnings-metrics/);
+  assert.match(body, /Confirmed earnings/);
   assert.match(body, /Approved Commission included in Net Commission Revenue/);
   assert.match(body, /Placement breakdown/);
   assert.doesNotMatch(body, /CHINAFLOW_EVENTS/);
   assert.doesNotMatch(body, /trip_bookings/);
   assert.doesNotMatch(body, /trip_commissions/);
+  assert.doesNotMatch(body, /publisher_earnings_entries/);
 
   for (const method of ["POST","PUT","PATCH","DELETE","OPTIONS"]) {
     const rejected = await handleAppRequest(new Request(ORIGIN + "/reporting", {method}), env);

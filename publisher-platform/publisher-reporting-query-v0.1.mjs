@@ -86,6 +86,20 @@ function querySql(table, amountColumns, placementFiltered) {
     ORDER BY attributed_placement, currency`;
 }
 
+function earningsQuerySql(placementFiltered) {
+  return `SELECT attributed_placement AS placement, earnings_currency AS currency,
+      COUNT(*) AS rows_count,
+      COUNT(publisher_earnings_micros) AS publisher_earnings_micros_rows,
+      SUM(publisher_earnings_micros) AS publisher_earnings_micros
+    FROM publisher_earnings_entries
+    WHERE publisher_id = ?1
+      AND settlement_cycle_month >= ?2
+      AND settlement_cycle_month <= ?3
+      ${placementFiltered ? "AND attributed_placement = ?4" : ""}
+    GROUP BY attributed_placement, earnings_currency
+    ORDER BY attributed_placement, earnings_currency`;
+}
+
 function integerOrNull(value) {
   if (value === null || value === undefined) return null;
   const number = Number(value);
@@ -202,6 +216,16 @@ async function loadAggregate(database, publisherId, query, table, amountColumns)
   return normalizeRows(result?.results, amountColumns);
 }
 
+async function loadEarningsAggregate(database, publisherId, query) {
+  const sql = earningsQuerySql(query.placement !== null);
+  const statement = database.prepare(sql);
+  const bound = query.placement === null
+    ? statement.bind(publisherId, query.from, query.to)
+    : statement.bind(publisherId, query.from, query.to, query.placement);
+  const result = await bound.all();
+  return normalizeRows(result?.results, ["publisher_earnings_micros"]);
+}
+
 export async function getPublisherReportingSummary(database, token, query) {
   const valid = validateQueryObject(query);
   if (!valid) return failure(400, "invalid_input");
@@ -219,6 +243,9 @@ export async function getPublisherReportingSummary(database, token, query) {
     database, authorization.publisherId, valid, "trip_commissions",
     ["booking_amount_micros", "commission_amount_micros"]
   );
+  const earningsRows = await loadEarningsAggregate(
+    database, authorization.publisherId, valid
+  );
 
   return {
     status: 200,
@@ -228,7 +255,8 @@ export async function getPublisherReportingSummary(database, token, query) {
         period: { from: valid.from, to: valid.to },
         period_basis: {
           bookings: "order_date_month",
-          commissions: "commission_month"
+          commissions: "commission_month",
+          earnings: "settlement_cycle_month"
         },
         placement: valid.placement,
         commercial_terms: commercialTerms,
@@ -243,6 +271,11 @@ export async function getPublisherReportingSummary(database, token, query) {
             commissionRows, ["booking_amount_micros", "commission_amount_micros"]
           ),
           by_placement: commissionRows
+        },
+        earnings: {
+          rows: earningsRows.reduce((sum, row) => sum + row.rows, 0),
+          by_currency: totalsByCurrency(earningsRows, ["publisher_earnings_micros"]),
+          by_placement: earningsRows
         }
       }
     }
