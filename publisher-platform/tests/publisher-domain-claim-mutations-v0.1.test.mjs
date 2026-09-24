@@ -22,9 +22,9 @@ async function fixture(t, {
   sqlite.exec("PRAGMA foreign_keys=ON");
   const dir = new URL("../../collector/migrations/", import.meta.url);
   const files = readdirSync(dir)
-    .filter(name => /^(?:000[1-9]|0010)_.*\.sql$/.test(name))
+    .filter(name => /^(?:000[1-9]|0010|0011)_.*\.sql$/.test(name))
     .sort();
-  assert.equal(files.length, 10);
+  assert.equal(files.length, 11);
   for (const file of files) {
     sqlite.exec(readFileSync(new URL(file, dir), "utf8"));
   }
@@ -54,7 +54,7 @@ async function fixture(t, {
   sqlite.prepare(`
     INSERT INTO publisher_sessions(
       session_id,user_id,token_hash,expires_at,created_at
-    ) VALUES ('s','u',?,'2099-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z')
+    ) VALUES ('s','u',?,'2099-01-01T00:00:00.000Z',CURRENT_TIMESTAMP)
   `).run(tokenHash);
   sqlite.prepare(`
     INSERT INTO publisher_domains(
@@ -133,6 +133,16 @@ function claim(db) {
   `).get() };
 }
 
+function claimAudit(db) {
+  return db.prepare(`
+    SELECT domain_id,publisher_id,hostname,actor_class,event_type,
+           previous_claim_status,new_claim_status,verification_status,
+           monetization_status_before,monetization_status_after
+    FROM publisher_domain_claim_audit
+    ORDER BY audit_id
+  `).all().map(row => ({ ...row }));
+}
+
 function commercialGraph(db) {
   return {
     sites: db.prepare("SELECT * FROM publisher_supplier_sites ORDER BY supplier_site_id").all(),
@@ -198,11 +208,24 @@ test("owner release preserves verification/commercial history and pauses active 
   assert.equal(after.claim_end_reason, "owner_release");
   assert.equal(after.monetization_status, "paused");
   assert.deepEqual(commercialGraph(f.sqlite), graphBefore);
+  assert.deepEqual(claimAudit(f.sqlite), [{
+    domain_id: "d",
+    publisher_id: "p",
+    hostname: HOSTNAME,
+    actor_class: "publisher_owner_session",
+    event_type: "owner_release",
+    previous_claim_status: "claimed",
+    new_claim_status: "released",
+    verification_status: "verified",
+    monetization_status_before: "enabled",
+    monetization_status_after: "paused"
+  }]);
 
   const retry = await releasePublisherHostname(f.database, TOKEN, { hostname: HOSTNAME });
   assert.equal(retry.status, 200);
   assert.equal(retry.body.claim.released, false);
   assert.deepEqual(commercialGraph(f.sqlite), graphBefore);
+  assert.equal(claimAudit(f.sqlite).length, 1);
 });
 
 for (const accountStatus of ["draft", "pending_review", "rejected", "active"]) {
@@ -227,6 +250,28 @@ for (const accountStatus of ["suspended", "closed"]) {
     assert.deepEqual(claim(f.sqlite), before);
   });
 }
+
+
+test("owner release requires a fresh session", async t => {
+  const stale = await fixture(t);
+  stale.sqlite.exec("UPDATE publisher_sessions SET created_at=datetime('now','-16 minutes')");
+  const before = claim(stale.sqlite);
+  assert.deepEqual(
+    await releasePublisherHostname(stale.database, TOKEN, { hostname: HOSTNAME }),
+    { status: 401, body: { error: "reauth_required" } }
+  );
+  assert.deepEqual(claim(stale.sqlite), before);
+
+  const fresh = await fixture(t);
+  fresh.sqlite.exec("UPDATE publisher_sessions SET created_at=datetime('now','-14 minutes')");
+  const result = await releasePublisherHostname(
+    fresh.database,
+    TOKEN,
+    { hostname: HOSTNAME }
+  );
+  assert.equal(result.status, 200);
+  assert.equal(result.body.claim.released, true);
+});
 
 test("owner release requires current owner/session and never overrides admin revoke", async t => {
   const noOwner = await fixture(t);
@@ -258,6 +303,7 @@ test("concurrent owner release calls converge without double mutation", async t 
   assert.deepEqual(results.map(r => r.status), [200, 200]);
   assert.deepEqual(results.map(r => r.body.claim.released).sort(), [false, true]);
   assert.equal(claim(f.sqlite).claim_status, "released");
+  assert.equal(claimAudit(f.sqlite).length, 1);
 });
 
 test("admin revoke preserves verification/commercial history and pauses active monetization", async t => {
@@ -293,6 +339,18 @@ test("admin revoke preserves verification/commercial history and pauses active m
   assert.equal(after.claim_end_reason, "admin_revoke");
   assert.equal(after.monetization_status, "paused");
   assert.deepEqual(commercialGraph(f.sqlite), graphBefore);
+  assert.deepEqual(claimAudit(f.sqlite), [{
+    domain_id: "d",
+    publisher_id: "p",
+    hostname: HOSTNAME,
+    actor_class: "claim_admin_api",
+    event_type: "admin_revoke",
+    previous_claim_status: "claimed",
+    new_claim_status: "revoked",
+    verification_status: "verified",
+    monetization_status_before: "enabled",
+    monetization_status_after: "paused"
+  }]);
 
   const retry = await revokePublisherHostname(f.database, {
     publisher_id: "p",
@@ -300,6 +358,7 @@ test("admin revoke preserves verification/commercial history and pauses active m
   });
   assert.equal(retry.status, 200);
   assert.equal(retry.body.claim.revoked, false);
+  assert.equal(claimAudit(f.sqlite).length, 1);
 });
 
 test("admin revoke cannot overwrite owner release and exact publisher/hostname are required", async t => {
@@ -323,4 +382,5 @@ test("concurrent admin revoke calls converge without double mutation", async t =
   assert.deepEqual(results.map(r => r.status), [200, 200]);
   assert.deepEqual(results.map(r => r.body.claim.revoked).sort(), [false, true]);
   assert.equal(claim(f.sqlite).claim_status, "revoked");
+  assert.equal(claimAudit(f.sqlite).length, 1);
 });

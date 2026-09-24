@@ -8,6 +8,8 @@ const OWNER_RELEASE_ALLOWED_ACCOUNT_STATUSES = new Set([
   "active"
 ]);
 
+const OWNER_RELEASE_SESSION_MAX_AGE_MINUTES = 15;
+
 const failure = (status, error) => ({ status, body: { error } });
 
 function validPublisherId(value) {
@@ -89,6 +91,29 @@ export function validateAdminRevokeInput(input) {
   return { publisherId: input.publisher_id, hostname };
 }
 
+async function ownerReleaseSessionIsFresh(database, session) {
+  const row = await database.prepare(`
+    SELECT
+      CASE
+        WHEN julianday(created_at) >= julianday('now', '-15 minutes')
+         AND julianday(created_at) <= julianday('now', '+1 minute')
+        THEN 1
+        ELSE 0
+      END AS is_fresh
+    FROM publisher_sessions
+    WHERE session_id = ?
+      AND user_id = ?
+      AND revoked_at IS NULL
+      AND julianday(expires_at) > julianday('now')
+    LIMIT 1
+  `).bind(
+    session.sessionId,
+    session.userId
+  ).first();
+
+  return Number(row?.is_fresh ?? 0) === 1;
+}
+
 async function readOwnerState(database, session, hostname) {
   const result = await database.prepare(`
     SELECT
@@ -121,6 +146,8 @@ async function readOwnerState(database, session, hostname) {
           AND s.user_id = ?
           AND s.revoked_at IS NULL
           AND julianday(s.expires_at) > julianday('now')
+          AND julianday(s.created_at) >= julianday('now', '-15 minutes')
+          AND julianday(s.created_at) <= julianday('now', '+1 minute')
           AND u.user_status = 'active'
       )
     ORDER BY m.created_at, m.membership_id, d.domain_id
@@ -157,6 +184,9 @@ export async function releasePublisherHostname(database, token, input) {
 
   const session = await validateSession(database, token);
   if (!session) return failure(401, "unauthenticated");
+  if (!await ownerReleaseSessionIsFresh(database, session)) {
+    return failure(401, "reauth_required");
+  }
 
   const initialResult = await readOwnerState(database, session, valid.hostname);
   if (initialResult.status) return initialResult;
@@ -211,6 +241,8 @@ export async function releasePublisherHostname(database, token, input) {
           AND s.user_id = ?
           AND s.revoked_at IS NULL
           AND julianday(s.expires_at) > julianday('now')
+          AND julianday(s.created_at) >= julianday('now', '-15 minutes')
+          AND julianday(s.created_at) <= julianday('now', '+1 minute')
           AND u.user_status = 'active'
       )
     RETURNING hostname,claim_status,monetization_status

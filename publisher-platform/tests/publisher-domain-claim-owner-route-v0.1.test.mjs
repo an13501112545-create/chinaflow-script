@@ -133,6 +133,24 @@ test("enabled owner release route enforces POST, exact Origin, session and stric
   }
 });
 
+test("enabled owner release route requires recent reauthentication", async t => {
+  const f = await fixture(t);
+  f.sqlite.exec("UPDATE publisher_sessions SET created_at=datetime('now','-16 minutes')");
+  const env = {
+    APP_ORIGIN: ORIGIN,
+    CLAIM_LIFECYCLE_MUTATIONS_ENABLED: "true",
+    CHINAFLOW_EVENTS: f.database
+  };
+  const cookie = `__Host-chinaflow_session=${f.token}`;
+  const response = await request({ cookie, env });
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: "reauth_required" });
+  assert.equal(
+    f.sqlite.prepare("SELECT claim_status FROM publisher_domains WHERE domain_id='d'").get().claim_status,
+    "claimed"
+  );
+});
+
 test("enabled owner release route releases only the session-owned hostname and retry is idempotent", async t => {
   const f = await fixture(t);
   const env = {
