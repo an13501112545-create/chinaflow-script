@@ -1,10 +1,13 @@
 import { executeInternalTripImportCommand } from "./reporting-importer-command-v0.1.mjs";
 import { executePublisherReconciliationCommand } from "./publisher-reconciliation-writer-v0.1.mjs";
+import { executePublisherEarningsCommand } from "./publisher-earnings-writer-v0.1.mjs";
 
 const ROUTE_PATHNAME =
   "/v1/internal/reporting/trip/import";
 const RECONCILIATION_ROUTE_PATHNAME =
   "/v1/internal/reporting/reconciliation";
+const EARNINGS_ROUTE_PATHNAME =
+  "/v1/internal/reporting/earnings";
 
 const ALLOWED_FIELD_NAMES = new Set([
   "command_type",
@@ -106,6 +109,10 @@ function reconciliationWriterEnabled(env) {
   return env?.PUBLISHER_RECONCILIATION_WRITER_ENABLED === "true";
 }
 
+function earningsWriterEnabled(env) {
+  return env?.PUBLISHER_EARNINGS_WRITER_ENABLED === "true";
+}
+
 function readReconciliationSecretToken(env) {
   if (!env || typeof env !== "object") return undefined;
   return env.CHINAFLOW_RECONCILIATION_API_TOKEN;
@@ -140,6 +147,44 @@ async function readBoundedJson(request, maxBytes = 16384) {
   } finally {
     try { reader.releaseLock(); } catch {}
   }
+}
+
+async function handleEarningsRequest(request, env, runtime) {
+  if (!earningsWriterEnabled(env)) return emptyResponse(404);
+  if (request.method !== "POST") return emptyResponse(405, { Allow: "POST" });
+
+  const token = readReconciliationSecretToken(env);
+  if (!isNonBlankString(token)) return emptyResponse(500);
+  if (request.headers.get("authorization") !== `Bearer ${token}`) return emptyResponse(401);
+
+  const url = new URL(request.url);
+  if (url.search) return emptyResponse(400);
+
+  const database = readDatabaseBinding(env);
+  if (!database || typeof database.prepare !== "function") return emptyResponse(500);
+
+  const mediaType = (request.headers.get("content-type") ?? "").split(";", 1)[0].trim().toLowerCase();
+  if (mediaType !== "application/json") return emptyResponse(415);
+
+  const idempotencyKey = request.headers.get("idempotency-key");
+  const input = await readBoundedJson(request);
+  if (input === null) return emptyResponse(400);
+
+  let result;
+  try {
+    result = await executePublisherEarningsCommand(database, input, idempotencyKey, runtime);
+  } catch (error) {
+    console.error("reporting-importer-worker-v0.1 earnings failed", error);
+    return emptyResponse(500);
+  }
+
+  return new Response(JSON.stringify(result.body), {
+    status: result.status,
+    headers: {
+      "Content-Type": "application/json; charset=UTF-8",
+      "Cache-Control": "no-store"
+    }
+  });
 }
 
 async function handleReconciliationRequest(request, env, runtime) {
@@ -186,6 +231,10 @@ export async function handleReportingImporterRequest(
   runtime
 ) {
   const pathname = new URL(request.url).pathname;
+
+  if (pathname === EARNINGS_ROUTE_PATHNAME) {
+    return handleEarningsRequest(request, env, runtime);
+  }
 
   if (pathname === RECONCILIATION_ROUTE_PATHNAME) {
     return handleReconciliationRequest(request, env, runtime);
