@@ -680,17 +680,26 @@ When validation fails, stop and report the failure before modifying additional f
 - TEST has prior importer acceptance data; Production currently has no booking/commission ingestion facts
 - the Reporting Importer Worker accepts authenticated multipart input containing the original file bytes plus caller-prepared `rows_json`; it does not parse raw Trip.com CSV/XLSX files itself
 - the publisher Reporting Query Layer is live in TEST and Production at `GET /api/reporting/summary`
+- the publisher Reporting UI is live in TEST and Production at `/reporting`; browser code reads only the session-isolated Query Layer and never queries D1 directly
 - reporting query authorization derives publisher identity from the authenticated session and active membership; the client cannot select `publisher_id`
 - reporting queries enforce `attributed_publisher_id` tenant isolation and never authorize via `trip_sub1` alone
 - reporting summary accepts a bounded `YYYY-MM` range plus optional exact placement filter, keeps booking and commission period bases explicit, groups monetary totals by currency, and exposes amount-row completeness so missing amounts are not silently treated as zero
+- supplier-reported commission is explicitly labeled as supplier reporting and is never presented as Publisher earnings
+- migration `0012_publisher_commercial_terms_v1.sql` is live in TEST and Production
+- `publisher_commercial_terms` is append-only version history; official v1 standard terms are Publisher 70%, ChinaFlow 30%, USD monthly settlement, US$100 regular minimum payout, payable within 30 days after the applicable monthly cycle
+- the formal Production publisher has exactly one standard commercial-terms version effective from its original v1 Terms acceptance; TEST historical `test-v1` data is not silently mapped to official standard terms
+- reporting exposes current effective commercial terms, but does not calculate Publisher earnings
 - real Trip.com export parser acceptance is deferred until the first real booking/commission export exists; absence of a real export does not block the Query Layer or other reporting engineering
 
 Next approved engineering direction:
 
 - keep real Trip.com parser mapping deferred until a real booking/commission export exists
 - when a real export becomes available, follow `collector/trip-export-parser-acceptance-v0.1.md` and do not invent source columns
-- build publisher-facing reporting presentation only on top of the session-isolated Query Layer; do not query `trip_bookings` or `trip_commissions` directly from browser code
-- do not create another Worker, database, or reporting data model unless separately approved
+- establish a separate append-only reconciliation layer for Approved Commission and Net Commission Revenue; do not mutate Supplier booking/commission facts to represent reconciliation
+- do not calculate Publisher earnings from `trip_commissions.commission_amount_micros` alone and do not apply the 70% share until commission has become Approved Commission and the corresponding Net Commission Revenue has been actually received and retained by ChinaFlow
+- preserve source currency and actual settlement/reconciliation evidence; do not invent FX conversion or USD earnings without an authoritative rate/settlement fact
+- only after reconciled Net Commission Revenue exists may a settlement layer calculate Publisher earnings from the effective commercial-terms version
+- do not create another Worker or database for reconciliation unless separately approved; use the existing D1 sidecar unless a concrete requirement proves otherwise
 
 ---
 
@@ -709,8 +718,14 @@ trip_bookings
 trip_commissions
 → Trip.com commission facts
 
-future commercial terms
-→ publisher payout / share rules
+publisher_commercial_terms
+→ append-only publisher share / settlement rules
+
+future reconciliation facts
+→ Approved Commission / Net Commission Revenue evidence
+
+future settlement facts
+→ Publisher earnings / payout ledger
 
 Attribution:
 
