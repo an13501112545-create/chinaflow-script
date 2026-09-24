@@ -187,7 +187,7 @@ test("authenticated admin revoke preserves verification and pauses monetization"
   assert.equal((await retry.json()).claim.revoked, false);
 });
 
-test("claim admin TEST/Production configs remain dark and Production requires isolated secret", () => {
+test("claim admin enables mutations only in TEST and Production requires isolated secret", () => {
   const testConfig = JSON.parse(readFileSync(
     new URL("../../wrangler.publisher-claim-admin-api.test.jsonc", import.meta.url),
     "utf8"
@@ -196,7 +196,7 @@ test("claim admin TEST/Production configs remain dark and Production requires is
     new URL("../../wrangler.publisher-claim-admin-api.production.jsonc", import.meta.url),
     "utf8"
   ));
-  assert.equal(testConfig.vars.CLAIM_LIFECYCLE_MUTATIONS_ENABLED, "false");
+  assert.equal(testConfig.vars.CLAIM_LIFECYCLE_MUTATIONS_ENABLED, "true");
   assert.equal(productionConfig.vars.CLAIM_LIFECYCLE_MUTATIONS_ENABLED, "false");
   assert.deepEqual(productionConfig.secrets.required, ["CLAIM_ADMIN_API_TOKEN"]);
   assert.equal(productionConfig.secrets.required.includes("REVIEW_API_TOKEN"), false);

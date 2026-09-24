@@ -167,12 +167,15 @@ test("enabled owner release route releases only the session-owned hostname and r
   assert.equal((await retry.json()).claim.released, false);
 });
 
-test("publisher app TEST and Production configs keep claim mutations disabled before cutover", () => {
-  for (const file of [
-    "../../wrangler.publisher-app.test.jsonc",
-    "../../wrangler.publisher-app.production.jsonc"
-  ]) {
-    const config = JSON.parse(readFileSync(new URL(file, import.meta.url), "utf8"));
-    assert.equal(config.vars.CLAIM_LIFECYCLE_MUTATIONS_ENABLED, "false");
-  }
+test("publisher app enables claim mutations only in TEST after cutover", () => {
+  const testConfig = JSON.parse(readFileSync(
+    new URL("../../wrangler.publisher-app.test.jsonc", import.meta.url),
+    "utf8"
+  ));
+  const productionConfig = JSON.parse(readFileSync(
+    new URL("../../wrangler.publisher-app.production.jsonc", import.meta.url),
+    "utf8"
+  ));
+  assert.equal(testConfig.vars.CLAIM_LIFECYCLE_MUTATIONS_ENABLED, "true");
+  assert.equal(productionConfig.vars.CLAIM_LIFECYCLE_MUTATIONS_ENABLED, "false");
 });
