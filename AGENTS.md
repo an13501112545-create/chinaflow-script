@@ -695,6 +695,10 @@ When validation fails, stop and report the failure before modifying additional f
 - `publisher_net_commission_revenue_entries` is the append-only actual received/retained Net Commission Revenue ledger; signed adjustments are preserved and currency is explicit
 - neither reconciliation nor Net Commission Revenue rows are auto-created from Supplier facts
 - no Publisher earnings, FX conversion, payout amount, or payment obligation is inferred from Supplier commission status or amount
+- the internal reconciliation writer is live in TEST and Production on the existing Reporting Importer Worker and uses an authorization secret separate from `CHINAFLOW_REPORTING_IMPORT_TOKEN`
+- TEST reconciliation acceptance has created one synthetic Approved Commission decision and one synthetic Net Commission Revenue entry with exact-retry idempotency; the fixture is explicitly TEST-only
+- Production currently has zero `trip_commissions`, zero reconciliation rows, and zero Net Commission Revenue rows
+- Production reconciliation enablement has been accepted only at the authorization/boundary level; no synthetic financial facts are created in Production
 
 Next approved engineering direction:
 
