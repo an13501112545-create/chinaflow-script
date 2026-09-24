@@ -679,16 +679,18 @@ When validation fails, stop and report the failure before modifying additional f
 - TEST and Production Reporting Importer Workers both use an isolated `CHINAFLOW_REPORTING_IMPORT_TOKEN`; Wrangler configs require that secret
 - TEST has prior importer acceptance data; Production currently has no booking/commission ingestion facts
 - the Reporting Importer Worker accepts authenticated multipart input containing the original file bytes plus caller-prepared `rows_json`; it does not parse raw Trip.com CSV/XLSX files itself
-- real Trip.com export parser acceptance is still blocked because no real booking/commission export file is available in the repository, Project/Library files, or connected Google Drive
+- the publisher Reporting Query Layer is live in TEST and Production at `GET /api/reporting/summary`
+- reporting query authorization derives publisher identity from the authenticated session and active membership; the client cannot select `publisher_id`
+- reporting queries enforce `attributed_publisher_id` tenant isolation and never authorize via `trip_sub1` alone
+- reporting summary accepts a bounded `YYYY-MM` range plus optional exact placement filter, keeps booking and commission period bases explicit, groups monetary totals by currency, and exposes amount-row completeness so missing amounts are not silently treated as zero
+- real Trip.com export parser acceptance is deferred until the first real booking/commission export exists; absence of a real export does not block the Query Layer or other reporting engineering
 
 Next approved engineering direction:
 
-- obtain at least one real Trip.com booking export and one real Trip.com commission export (or the actual combined export format, if that is what Trip.com provides)
-- inspect the real headers, encodings, date/amount/status representations, and file format without inventing missing fields
-- implement the smallest parser/adapter that converts the real export into the existing normalized importer row contract
-- validate parser output against the existing deterministic preflight, attribution, dedupe, planning, and atomic persistence pipeline in TEST
-- only after TEST acceptance, run the first guarded Production ingestion
-- do not create another Worker, database, or reporting data model for parsing unless separately approved
+- keep real Trip.com parser mapping deferred until a real booking/commission export exists
+- when a real export becomes available, follow `collector/trip-export-parser-acceptance-v0.1.md` and do not invent source columns
+- build publisher-facing reporting presentation only on top of the session-isolated Query Layer; do not query `trip_bookings` or `trip_commissions` directly from browser code
+- do not create another Worker, database, or reporting data model unless separately approved
 
 ---
 
