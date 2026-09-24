@@ -187,7 +187,7 @@ test("authenticated admin revoke preserves verification and pauses monetization"
   assert.equal((await retry.json()).claim.revoked, false);
 });
 
-test("claim admin revoke gate is enabled only in TEST and Production requires isolated secret", () => {
+test("claim admin revoke gate is enabled in TEST and Production requires isolated secret", () => {
   const testConfig = JSON.parse(readFileSync(
     new URL("../../wrangler.publisher-claim-admin-api.test.jsonc", import.meta.url),
     "utf8"
@@ -197,7 +197,7 @@ test("claim admin revoke gate is enabled only in TEST and Production requires is
     "utf8"
   ));
   assert.equal(testConfig.vars.CLAIM_ADMIN_REVOKE_ENABLED, "true");
-  assert.equal(productionConfig.vars.CLAIM_ADMIN_REVOKE_ENABLED, "false");
+  assert.equal(productionConfig.vars.CLAIM_ADMIN_REVOKE_ENABLED, "true");
   assert.deepEqual(productionConfig.secrets.required, ["CLAIM_ADMIN_API_TOKEN"]);
   assert.equal(productionConfig.secrets.required.includes("REVIEW_API_TOKEN"), false);
   assert.equal(productionConfig.secrets.required.includes("PROVISION_API_TOKEN"), false);

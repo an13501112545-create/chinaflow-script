@@ -15,7 +15,7 @@
   ],
   "vars": {
     "APP_ENVIRONMENT": "production",
-    "CLAIM_ADMIN_REVOKE_ENABLED": "false"
+    "CLAIM_ADMIN_REVOKE_ENABLED": "true"
   },
   "secrets": {
     "required": ["CLAIM_ADMIN_API_TOKEN"]
