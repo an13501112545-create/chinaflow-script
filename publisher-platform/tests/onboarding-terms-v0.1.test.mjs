@@ -9,13 +9,33 @@ import { TERMS_VERSION } from '../onboarding-terms-v0.1.mjs';
 
 const valid = { terms_version: TERMS_VERSION, accepted: true };
 const TEST_APP_ORIGIN = "https://app.getchinaflow.com";
+
+function migrationStatements(source) {
+  const lines = source.replace(/--[^\n]*/g, '').split('\n');
+  const statements = [];
+  let current = '';
+  let inTrigger = false;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (!current && /^CREATE\s+TRIGGER\b/i.test(line)) inTrigger = true;
+    current += (current ? '\n' : '') + line;
+    if ((inTrigger && /^END;$/i.test(line)) || (!inTrigger && line.endsWith(';'))) {
+      statements.push(current);
+      current = '';
+      inTrigger = false;
+    }
+  }
+  if (current.trim()) statements.push(current);
+  return statements;
+}
 async function fixture(t) {
   const sql = new DatabaseSync(':memory:');
   t.after(() => sql.close());
   sql.exec('PRAGMA foreign_keys=ON');
   const dir = new URL('../../collector/migrations/', import.meta.url);
-  const files = readdirSync(dir).filter(n => /^000[1-6]_.*\.sql$/.test(n)).sort();
-  assert.equal(files.length, 6);
+  const files = readdirSync(dir).filter(n => /^(?:000[1-6]|0012)_.*\.sql$/.test(n)).sort();
+  assert.equal(files.length, 7);
   for (const file of files) sql.exec(readFileSync(new URL(file, dir), 'utf8'));
   sql.exec(`INSERT INTO publisher_users(user_id,email,email_normalized) VALUES ('u1','a@example.test','a@example.test'),('u2','b@example.test','b@example.test');
     INSERT INTO publishers(publisher_id,slug,display_name,updated_at) VALUES ('p1','p1','Example','2000-01-01'),('p2','p2','Other','2000-01-01');
@@ -34,8 +54,13 @@ async function fixture(t) {
   }; } }; } };
   const sessions = [await createSession(db, 'u1'), await createSession(db, 'u2')];
   const publisher = () => ({ ...sql.prepare("SELECT * FROM publishers WHERE publisher_id='p1'").get() });
-  const snapshot = () => Object.fromEntries(sql.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('publishers','acceptance_mutations') ORDER BY name").all()
+  const snapshot = () => Object.fromEntries(sql.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('publishers','publisher_commercial_terms','acceptance_mutations') ORDER BY name").all()
     .map(({ name }) => [name, sql.prepare(`SELECT * FROM ${name}`).all()]));
+  const commercialTerms = () => sql.prepare(`SELECT
+    terms_source,terms_reference,publisher_share_bps,settlement_currency,
+    minimum_payout_micros,settlement_cycle,payout_days_after_cycle_end,effective_from
+    FROM publisher_commercial_terms WHERE publisher_id='p1'
+    ORDER BY effective_from,created_at`).all().map(row => ({ ...row }));
   async function request({ body = valid, token = sessions[0].token, origin = TEST_APP_ORIGIN, appOrigin = TEST_APP_ORIGIN,
     type = 'application/json; charset=UTF-8', path = '/api/onboarding/terms', method = 'POST' } = {}) {
     const headers = {};
@@ -51,7 +76,7 @@ async function fixture(t) {
     assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
     return { status: response.status, body: await response.json() };
   }
-  return { sql, state, sessions, publisher, snapshot, request };
+  return { sql, state, sessions, publisher, commercialTerms, snapshot, request };
 }
 
 test('migration is nullable, additive, no backfill and restrictive actor FK', async t => {
@@ -111,6 +136,16 @@ test('GET reports current terms state without mutation and tracks acceptance', a
     current.body.terms.terms_accepted_at,
     accepted.body.terms.terms_accepted_at
   );
+  assert.deepEqual(f.commercialTerms(), [{
+    terms_source: 'standard_terms',
+    terms_reference: TERMS_VERSION,
+    publisher_share_bps: 7000,
+    settlement_currency: 'USD',
+    minimum_payout_micros: 100000000,
+    settlement_cycle: 'monthly',
+    payout_days_after_cycle_end: 30,
+    effective_from: accepted.body.terms.terms_accepted_at
+  }]);
   assert.equal(current.body.terms.terms_accepted_by_user_id, undefined);
 
   assert.equal(
@@ -222,6 +257,10 @@ for (const different of [false, true]) test(`concurrent acceptance and immutable
   for (const session of f.sessions) assert.deepEqual((await f.request({ token: session.token })).body, results[0].body);
   assert.deepEqual(f.publisher(), accepted);
   assert.equal(f.sql.prepare('SELECT count(*) n FROM acceptance_mutations').get().n, 1);
+  assert.equal(f.commercialTerms().length, 1);
+  assert.equal(f.commercialTerms()[0].publisher_share_bps, 7000);
+  assert.equal(f.commercialTerms()[0].settlement_currency, 'USD');
+  assert.equal(f.commercialTerms()[0].minimum_payout_micros, 100000000);
   for (const key of Object.keys(before).filter(k => !['terms_version','terms_accepted_at','terms_accepted_by_user_id','updated_at'].includes(k))) assert.equal(accepted[key], before[key]);
   assert.deepEqual(f.snapshot(), protectedBefore);
   assert.equal(results[0].body.terms.terms_accepted_by_user_id, undefined);
@@ -337,9 +376,9 @@ test('real local workerd/D1: concurrent owners, retry, denial, immutable attribu
   t.after(() => mf.dispose());
   const db = await mf.getD1Database('CHINAFLOW_EVENTS');
   const dir = new URL('../../collector/migrations/', import.meta.url);
-  for (const file of readdirSync(dir).filter(n => /^000[1-6]_.*\.sql$/.test(n)).sort()) {
-    const statements = readFileSync(new URL(file,dir),'utf8').replace(/--[^\n]*/g,'').split(';').map(s=>s.trim()).filter(Boolean);
-    for (const statement of statements) await db.prepare(statement).run();
+  for (const file of readdirSync(dir).filter(n => /^(?:000[1-6]|0012)_.*\.sql$/.test(n)).sort()) {
+    const statements = migrationStatements(readFileSync(new URL(file,dir),'utf8'));
+    await db.batch(statements.map(statement => db.prepare(statement)));
   }
   assert.equal((await db.prepare('PRAGMA foreign_keys').first()).foreign_keys,1);
   await db.prepare("INSERT INTO publisher_users(user_id,email,email_normalized) VALUES ('u1','a@example.test','a@example.test'),('u2','b@example.test','b@example.test')").run();
@@ -350,7 +389,7 @@ test('real local workerd/D1: concurrent owners, retry, denial, immutable attribu
   await db.prepare('CREATE TRIGGER count_acceptance AFTER UPDATE ON publishers BEGIN INSERT INTO acceptance_mutations VALUES (1); END').run();
   const sessions = [await createSession(db,'u1'),await createSession(db,'u2')];
   const snapshot = async () => {
-    const tables = (await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT IN ('publishers','acceptance_mutations') ORDER BY name").all()).results;
+    const tables = (await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name NOT IN ('publishers','publisher_commercial_terms','acceptance_mutations') ORDER BY name").all()).results;
     return Promise.all(tables.map(async ({name})=>[name,(await db.prepare(`SELECT * FROM ${name}`).all()).results]));
   };
   const before=await snapshot();
@@ -379,6 +418,18 @@ test('real local workerd/D1: concurrent owners, retry, denial, immutable attribu
   for(const session of sessions) assert.deepEqual(await request(session.token),results[0]);
   assert.deepEqual(await db.prepare('SELECT * FROM publishers').first(),accepted);
   assert.equal((await db.prepare('SELECT count(*) n FROM acceptance_mutations').first()).n,1);
+  assert.deepEqual((await db.prepare(`SELECT
+    terms_source,terms_reference,publisher_share_bps,settlement_currency,
+    minimum_payout_micros,settlement_cycle,payout_days_after_cycle_end
+    FROM publisher_commercial_terms WHERE publisher_id='p1'`).first()), {
+    terms_source:'standard_terms',
+    terms_reference:TERMS_VERSION,
+    publisher_share_bps:7000,
+    settlement_currency:'USD',
+    minimum_payout_micros:100000000,
+    settlement_cycle:'monthly',
+    payout_days_after_cycle_end:30
+  });
   assert.deepEqual(await snapshot(),before);
   await db.prepare("UPDATE publisher_memberships SET membership_status='removed' WHERE user_id='u2'").run();
   assert.equal((await request(sessions[1].token)).status,403);
