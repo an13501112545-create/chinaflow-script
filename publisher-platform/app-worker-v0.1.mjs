@@ -881,6 +881,7 @@ button:disabled{opacity:.55;cursor:default}
 .metric-label{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#7b8794;font-weight:700}
 .metric-value{font-size:23px;font-weight:750;margin-top:5px;word-break:break-word}
 .metric-note{font-size:12px;color:#7b8794;margin-top:4px}
+.fine-print{font-size:13px;color:#7b8794;margin:0 0 10px}
 .status{min-height:24px;margin:12px 0;color:#52606d}
 .error{color:#b42318}
 .hidden{display:none}
@@ -898,7 +899,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
 <div class="topbar">
   <div>
     <h1>Publisher reporting</h1>
-    <p>Bookings and commission facts attributed to your ChinaFlow publisher account.</p>
+    <p>Bookings and supplier-reported commission facts attributed to your ChinaFlow publisher account.</p>
   </div>
   <a href="/onboarding">Publisher settings</a>
 </div>
@@ -920,7 +921,8 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
       <div id="booking-metrics" class="metric-grid"></div>
     </div>
     <div class="card">
-      <h2>Commissions</h2>
+      <h2>Supplier commission reporting</h2>
+      <p class="fine-print">Supplier-reported commission is not Publisher earnings. Publisher earnings are calculated only from Approved Commission included in Net Commission Revenue under your commercial terms.</p>
       <div id="commission-metrics" class="metric-grid"></div>
     </div>
   </section>
@@ -1026,14 +1028,14 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
         '<td class="number">' + String(c?.rows ?? 0) + '</td>' +
         '<td class="number">' + formatMicros(c?.commission_amount_micros ?? null, currencyValue) + '</td></tr>';
     }).join("");
-    placementTable.innerHTML = '<table><thead><tr><th>Placement</th><th>Currency</th><th class="number">Bookings</th><th class="number">Booking amount</th><th class="number">Commission facts</th><th class="number">Commission</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    placementTable.innerHTML = '<table><thead><tr><th>Placement</th><th>Currency</th><th class="number">Bookings</th><th class="number">Booking amount</th><th class="number">Supplier commission facts</th><th class="number">Supplier commission</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   function render(reporting) {
     renderCurrencyMetrics(bookingMetrics, reporting.bookings, "booking_amount_micros", "Booking amount");
-    renderCurrencyMetrics(commissionMetrics, reporting.commissions, "commission_amount_micros", "Commission");
+    renderCurrencyMetrics(commissionMetrics, reporting.commissions, "commission_amount_micros", "Supplier commission");
     renderPlacementTable(reporting);
-    periodBasis.textContent = "Bookings use order month. Commissions use commission month.";
+    periodBasis.textContent = "Bookings use order month. Supplier commission reporting uses commission month.";
     content.classList.remove("hidden");
   }
 

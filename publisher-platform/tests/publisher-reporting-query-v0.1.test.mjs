@@ -243,7 +243,9 @@ test("reporting page serves same-origin UI and rejects non-GET methods", async (
   assert.match(body, /\/api\/auth\/session/);
   assert.match(body, /\/api\/reporting\/summary\?/);
   assert.match(body, /Booking amount/);
-  assert.match(body, /Commission/);
+  assert.match(body, /Supplier commission reporting/);
+  assert.match(body, /Supplier-reported commission is not Publisher earnings/);
+  assert.match(body, /Approved Commission included in Net Commission Revenue/);
   assert.match(body, /Placement breakdown/);
   assert.doesNotMatch(body, /CHINAFLOW_EVENTS/);
   assert.doesNotMatch(body, /trip_bookings/);
