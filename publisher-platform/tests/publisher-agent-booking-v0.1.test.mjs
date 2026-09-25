@@ -154,7 +154,7 @@ test("agent booking rejects ambiguous active agent placements", async t => {
   assert.deepEqual(result, { status: 409, body: { error: "conflict" } });
 });
 
-test("agent booking rollout gate is exact and enabled only in TEST config", () => {
+test("agent booking rollout gate is exact and enabled in TEST and Production configs", () => {
   assert.equal(agentBookingEnabled({ AGENT_BOOKING_ENABLED: "true" }), true);
   for (const value of [undefined, null, "", "false", "TRUE", true, 1]) {
     assert.equal(agentBookingEnabled({ AGENT_BOOKING_ENABLED: value }), false);
@@ -168,7 +168,7 @@ test("agent booking rollout gate is exact and enabled only in TEST config", () =
   ));
 
   assert.equal(testConfig.vars.AGENT_BOOKING_ENABLED, "true");
-  assert.equal(prodConfig.vars.AGENT_BOOKING_ENABLED, undefined);
+  assert.equal(prodConfig.vars.AGENT_BOOKING_ENABLED, "true");
 });
 
 test("agent booking API route is gated, same-origin and session-derived", async t => {

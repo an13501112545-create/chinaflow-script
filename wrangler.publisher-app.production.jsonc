@@ -21,7 +21,8 @@
     "CHINAFLOW_RUNTIME_ORIGIN": "https://chinaflow-config-api-v0-1.an13501112545.workers.dev",
     "OWNER_CLAIM_RELEASE_ENABLED": "true",
     "TURNSTILE_SITE_KEY": "0x4AAAAAAE_3sCwQEQ0l4r3n",
-    "PUBLISHER_REPORTING_QUERY_ENABLED": "true"
+    "PUBLISHER_REPORTING_QUERY_ENABLED": "true",
+    "AGENT_BOOKING_ENABLED": "true"
   },
   "ratelimits": [
     {
