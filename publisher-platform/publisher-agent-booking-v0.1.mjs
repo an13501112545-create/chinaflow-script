@@ -1,4 +1,5 @@
 import { validateSession } from "./auth-session-validate-v0.1.mjs";
+import { TERMS_VERSION } from "./onboarding-terms-v0.1.mjs";
 
 const SUPPLIER = "trip.com";
 const CHANNEL = "agent_booking";
@@ -26,24 +27,25 @@ function safePlacement(value) {
     /^[A-Za-z0-9_-]{2,64}$/.test(value);
 }
 
+function routingCredentials(env) {
+  const aid = env?.AGENT_BOOKING_TRIP_AID;
+  const sid = env?.AGENT_BOOKING_TRIP_SID;
+  return safeSupplierCredential(aid) && safeSupplierCredential(sid)
+    ? { aid, sid }
+    : null;
+}
+
 async function resolveAgentBooking(database, session) {
   const result = await database.prepare(`
     SELECT
       p.publisher_id,
-      s.aid,
-      s.sid,
       pp.placement,
       pp.external_tracking_key
     FROM publisher_memberships m
     JOIN publishers p
       ON p.publisher_id = m.publisher_id
-    JOIN publisher_domains d
-      ON d.publisher_id = p.publisher_id
-     AND d.is_primary = 1
-    JOIN publisher_supplier_sites s
-      ON s.publisher_id = p.publisher_id
-     AND s.domain_id = d.domain_id
-     AND s.supplier = ?
+    JOIN publisher_users u
+      ON u.user_id = m.user_id
     JOIN publisher_channel_capabilities c
       ON c.publisher_id = p.publisher_id
      AND c.channel = ?
@@ -53,14 +55,12 @@ async function resolveAgentBooking(database, session) {
      AND pp.channel = ?
     WHERE m.user_id = ?
       AND m.membership_status = 'active'
-      AND p.account_status = 'active'
-      AND d.install_status = 'detected'
-      AND d.verification_status = 'verified'
-      AND d.claim_status = 'claimed'
-      AND d.review_status = 'approved'
-      AND d.monetization_status = 'enabled'
-      AND s.provisioning_status = 'active'
-      AND s.provisioned_at IS NOT NULL
+      AND u.user_status = 'active'
+      AND u.email_verified_at IS NOT NULL
+      AND p.account_status IN ('draft', 'pending_review', 'active')
+      AND p.terms_version = ?
+      AND p.terms_accepted_at IS NOT NULL
+      AND p.terms_accepted_by_user_id IS NOT NULL
       AND c.capability_status = 'enabled'
       AND c.enabled_at IS NOT NULL
       AND pp.is_active = 1
@@ -79,11 +79,11 @@ async function resolveAgentBooking(database, session) {
     ORDER BY p.publisher_id, pp.placement
     LIMIT 2
   `).bind(
-    SUPPLIER,
     CHANNEL,
     SUPPLIER,
     CHANNEL,
     session.userId,
+    TERMS_VERSION,
     session.sessionId,
     session.userId
   ).all();
@@ -95,8 +95,6 @@ async function resolveAgentBooking(database, session) {
   const row = rows[0];
   if (
     typeof row.publisher_id !== "string" ||
-    !safeSupplierCredential(row.aid) ||
-    !safeSupplierCredential(row.sid) ||
     !safePlacement(row.placement) ||
     row.external_tracking_key !== row.placement
   ) {
@@ -106,17 +104,20 @@ async function resolveAgentBooking(database, session) {
   return { row };
 }
 
-function buildDestination(row, product) {
-  if (!validProduct(product)) return null;
+function buildDestination(row, product, credentials) {
+  if (!validProduct(product) || !credentials) return null;
   const url = new URL(HOTEL_BASE_URL);
-  url.searchParams.set("Allianceid", row.aid);
-  url.searchParams.set("SID", row.sid);
+  url.searchParams.set("Allianceid", credentials.aid);
+  url.searchParams.set("SID", credentials.sid);
   url.searchParams.set("trip_sub1", row.placement);
   return url.toString();
 }
 
-export async function getAgentBookingLaunch(database, token, product) {
+export async function getAgentBookingLaunch(database, token, product, env) {
   if (!validProduct(product)) return failure(400, "invalid_input");
+
+  const credentials = routingCredentials(env);
+  if (!credentials) return failure(503, "temporarily_unavailable");
 
   const session = await validateSession(database, token);
   if (!session) return failure(401, "unauthenticated");
@@ -125,8 +126,8 @@ export async function getAgentBookingLaunch(database, token, product) {
   if (authorization.status) return authorization;
 
   const { row } = authorization;
-  const destinationUrl = buildDestination(row, product);
-  if (!destinationUrl) return failure(400, "invalid_input");
+  const destinationUrl = buildDestination(row, product, credentials);
+  if (!destinationUrl) return failure(503, "temporarily_unavailable");
 
   return {
     status: 200,

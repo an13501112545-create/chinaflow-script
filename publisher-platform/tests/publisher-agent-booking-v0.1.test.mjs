@@ -12,6 +12,10 @@ import {
 const ORIGIN = "https://publisher.example.test";
 const API_ROUTE = "/api/agent-booking/launch";
 const PAGE_ROUTE = "/agent-booking";
+const ROUTING_ENV = {
+  AGENT_BOOKING_TRIP_AID: "10021103",
+  AGENT_BOOKING_TRIP_SID: "330739613"
+};
 
 function fixture(t) {
   const sqlite = new DatabaseSync(":memory:");
@@ -21,8 +25,8 @@ function fixture(t) {
   for (const file of files) sqlite.exec(readFileSync(new URL(file, dir), "utf8"));
 
   sqlite.exec(`
-    INSERT INTO publisher_users(user_id,email,email_normalized)
-    VALUES ('u','owner@example.test','owner@example.test');
+    INSERT INTO publisher_users(user_id,email,email_normalized,email_verified_at)
+    VALUES ('u','owner@example.test','owner@example.test','2026-09-01');
 
     INSERT INTO publishers(
       publisher_id,slug,display_name,account_status,terms_version,
@@ -93,7 +97,9 @@ function fixture(t) {
 test("agent booking launch uses authenticated publisher Trip credentials and agent placement", async t => {
   const f = fixture(t);
   const session = await createSession(f.database, "u");
-  const result = await getAgentBookingLaunch(f.database, session.token, "hotel");
+  const result = await getAgentBookingLaunch(
+    f.database, session.token, "hotel", ROUTING_ENV
+  );
 
   assert.equal(result.status, 200);
   assert.deepEqual(result.body.agent_booking, {
@@ -109,31 +115,76 @@ test("agent booking launch uses authenticated publisher Trip credentials and age
 
 test("agent booking fails closed for invalid session and unsupported product", async t => {
   const f = fixture(t);
-  assert.equal((await getAgentBookingLaunch(f.database, "bad", "hotel")).status, 401);
+  assert.equal(
+    (await getAgentBookingLaunch(f.database, "bad", "hotel", ROUTING_ENV)).status,
+    401
+  );
 
   const session = await createSession(f.database, "u");
   assert.deepEqual(
-    await getAgentBookingLaunch(f.database, session.token, "flight"),
+    await getAgentBookingLaunch(f.database, session.token, "flight", ROUTING_ENV),
     { status: 400, body: { error: "invalid_input" } }
   );
 });
 
-test("agent booking fails closed when capability is disabled or claim is released", async t => {
+test("agent booking is publisher-channel authorized, not website-install authorized", async t => {
   const f = fixture(t);
   const session = await createSession(f.database, "u");
 
   f.sqlite.exec(
-    "UPDATE publisher_channel_capabilities SET capability_status='disabled', disabled_at='2026-09-25' WHERE capability_id='cap'"
+    "UPDATE publisher_domains SET install_status='not_detected', verification_status='unverified', claim_status='unclaimed', claim_acquired_at=NULL, claim_ended_at=NULL, claim_end_reason=NULL, review_status='pending', monetization_status='disabled', first_seen_at=NULL, last_seen_at=NULL, verified_at=NULL, reviewed_at=NULL WHERE domain_id='d'"
   );
-  assert.equal((await getAgentBookingLaunch(f.database, session.token, "hotel")).status, 404);
+  f.sqlite.exec(
+    "UPDATE publisher_supplier_sites SET provisioning_status='disabled', provisioned_at=NULL WHERE supplier_site_id='s'"
+  );
+
+  assert.equal(
+    (await getAgentBookingLaunch(
+      f.database, session.token, "hotel", ROUTING_ENV
+    )).status,
+    200
+  );
 
   f.sqlite.exec(
-    "UPDATE publisher_channel_capabilities SET capability_status='enabled', disabled_at=NULL WHERE capability_id='cap'"
+    "UPDATE publisher_channel_capabilities SET capability_status='disabled', disabled_at='2026-09-25' WHERE capability_id='cap'"
   );
-  f.sqlite.exec(
-    "UPDATE publisher_domains SET claim_status='released', claim_ended_at='2026-09-25', claim_end_reason='owner_release', monetization_status='paused' WHERE domain_id='d'"
+  assert.equal(
+    (await getAgentBookingLaunch(
+      f.database, session.token, "hotel", ROUTING_ENV
+    )).status,
+    404
   );
-  assert.equal((await getAgentBookingLaunch(f.database, session.token, "hotel")).status, 404);
+});
+
+test("agent booking requires accepted terms, verified email, allowed account state and routing credentials", async t => {
+  const f = fixture(t);
+  const session = await createSession(f.database, "u");
+
+  f.sqlite.exec("UPDATE publishers SET terms_version=NULL, terms_accepted_at=NULL, terms_accepted_by_user_id=NULL WHERE publisher_id='p'");
+  assert.equal(
+    (await getAgentBookingLaunch(f.database, session.token, "hotel", ROUTING_ENV)).status,
+    404
+  );
+
+  f.sqlite.exec("UPDATE publishers SET terms_version='chinaflow-publisher-terms-v1', terms_accepted_at='2026-09-01', terms_accepted_by_user_id='u' WHERE publisher_id='p'");
+  f.sqlite.exec("UPDATE publisher_users SET email_verified_at=NULL WHERE user_id='u'");
+  assert.equal(
+    (await getAgentBookingLaunch(f.database, session.token, "hotel", ROUTING_ENV)).status,
+    404
+  );
+
+  f.sqlite.exec("UPDATE publisher_users SET email_verified_at='2026-09-01' WHERE user_id='u'");
+  f.sqlite.exec("UPDATE publishers SET account_status='rejected' WHERE publisher_id='p'");
+  assert.equal(
+    (await getAgentBookingLaunch(f.database, session.token, "hotel", ROUTING_ENV)).status,
+    404
+  );
+
+  f.sqlite.exec("UPDATE publishers SET account_status='draft' WHERE publisher_id='p'");
+  assert.deepEqual(
+    await getAgentBookingLaunch(f.database, session.token, "hotel", {}),
+    { status: 503, body: { error: "temporarily_unavailable" } }
+  );
 });
 
 test("agent booking rejects ambiguous active agent placements", async t => {
@@ -150,7 +201,9 @@ test("agent booking rejects ambiguous active agent placements", async t => {
     )
   `);
 
-  const result = await getAgentBookingLaunch(f.database, session.token, "hotel");
+  const result = await getAgentBookingLaunch(
+    f.database, session.token, "hotel", ROUTING_ENV
+  );
   assert.deepEqual(result, { status: 409, body: { error: "conflict" } });
 });
 
@@ -169,6 +222,10 @@ test("agent booking rollout gate is exact and enabled in TEST and Production con
 
   assert.equal(testConfig.vars.AGENT_BOOKING_ENABLED, "true");
   assert.equal(prodConfig.vars.AGENT_BOOKING_ENABLED, "true");
+  assert.equal(testConfig.vars.AGENT_BOOKING_TRIP_AID, "10021103");
+  assert.equal(testConfig.vars.AGENT_BOOKING_TRIP_SID, "CHINAFLOW_TEST_ONLY");
+  assert.equal(prodConfig.vars.AGENT_BOOKING_TRIP_AID, "10021103");
+  assert.equal(prodConfig.vars.AGENT_BOOKING_TRIP_SID, "330739613");
 });
 
 test("agent booking API route is gated, same-origin and session-derived", async t => {
@@ -177,6 +234,8 @@ test("agent booking API route is gated, same-origin and session-derived", async 
   const env = {
     APP_ORIGIN: ORIGIN,
     AGENT_BOOKING_ENABLED: "true",
+    AGENT_BOOKING_TRIP_AID: ROUTING_ENV.AGENT_BOOKING_TRIP_AID,
+    AGENT_BOOKING_TRIP_SID: ROUTING_ENV.AGENT_BOOKING_TRIP_SID,
     CHINAFLOW_EVENTS: f.database
   };
   const cookie = `__Host-chinaflow_session=${session.token}`;

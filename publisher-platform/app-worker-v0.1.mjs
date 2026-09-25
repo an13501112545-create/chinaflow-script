@@ -1261,7 +1261,8 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
     const result = await getAgentBookingLaunch(
       env?.CHINAFLOW_EVENTS,
       token,
-      url.searchParams.get("product")
+      url.searchParams.get("product"),
+      env
     );
     return json(result.status, result.body);
   }
