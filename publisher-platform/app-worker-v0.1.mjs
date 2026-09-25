@@ -17,6 +17,10 @@ import {
   parsePublisherReportingQuery,
   getPublisherReportingSummary
 } from "./publisher-reporting-query-v0.1.mjs";
+import {
+  agentBookingEnabled,
+  getAgentBookingLaunch
+} from "./publisher-agent-booking-v0.1.mjs";
 
 function requireAppOrigin(env) {
   const value = env?.APP_ORIGIN;
@@ -117,6 +121,8 @@ const VERIFY_INSTALL_ROUTE = "/api/onboarding/verify-install";
 const RELEASE_HOSTNAME_ROUTE = "/api/onboarding/release-hostname";
 const REPORTING_SUMMARY_ROUTE = "/api/reporting/summary";
 const REPORTING_PAGE_ROUTE = "/reporting";
+const AGENT_BOOKING_LAUNCH_ROUTE = "/api/agent-booking/launch";
+const AGENT_BOOKING_PAGE_ROUTE = "/agent-booking";
 const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 const TURNSTILE_ACTION = "publisher_magic_link";
 const TURNSTILE_SITE_KEY_PLACEHOLDER =
@@ -845,6 +851,88 @@ a{color:#0b7285}
 </html>`);
   }
 
+  if (url.pathname === AGENT_BOOKING_PAGE_ROUTE) {
+    if (request.method !== "GET") {
+      return json(405, { error: "method_not_allowed" }, { "Allow": "GET" });
+    }
+    if (!agentBookingEnabled(env)) {
+      return json(404, { error: "not_found" });
+    }
+
+    return html(200, `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChinaFlow Agent Booking</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f6f9fb;color:#15202b;margin:0}
+main{max-width:760px;margin:52px auto;padding:0 20px 64px}
+h1{font-size:32px;margin:0 0 8px}
+h2{font-size:20px;margin:0 0 8px}
+p{line-height:1.55;color:#52606d}
+.card{background:#fff;border:1px solid #d9e2ec;border-radius:14px;padding:24px;margin-top:22px}
+.action{display:inline-block;margin-top:12px;padding:12px 18px;border-radius:9px;background:#0b7285;color:#fff;text-decoration:none;font-weight:700}
+.action[aria-disabled="true"]{opacity:.55;pointer-events:none}
+.status{min-height:24px;margin-top:14px;color:#52606d}
+.error{color:#b42318}
+.fine{font-size:13px;color:#7b8794;margin-top:16px}
+.toplink{display:inline-block;margin-bottom:22px;color:#0b7285}
+</style>
+</head>
+<body>
+<main>
+<a class="toplink" href="/reporting">← Publisher reporting</a>
+<h1>Agent Booking</h1>
+<p>Use the same ChinaFlow publisher account and attribution system when your team books for clients.</p>
+<section class="card">
+  <h2>Book hotels for your clients</h2>
+  <p>Open Trip.com through your ChinaFlow tracked booking path, then search and book normally for your customer.</p>
+  <a id="hotel-launch" class="action" href="#" aria-disabled="true" rel="noopener">Open Trip.com</a>
+  <p id="status" class="status" role="status">Preparing your tracked booking link…</p>
+  <p class="fine">Only eligible completed supplier bookings can become commissionable. ChinaFlow never asks for your client's payment card or passport details.</p>
+</section>
+<script>
+(() => {
+  const launch = document.getElementById("hotel-launch");
+  const status = document.getElementById("status");
+
+  fetch("/api/agent-booking/launch?product=hotel")
+    .then(async response => {
+      if (response.status === 401) {
+        location.assign("/login");
+        return null;
+      }
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.agent_booking?.destination_url) {
+        status.className = "status error";
+        status.textContent = response.status === 404
+          ? "Agent Booking is not enabled for this publisher account."
+          : "Unable to prepare your booking link. Please try again.";
+        return null;
+      }
+      return body.agent_booking;
+    })
+    .then(agentBooking => {
+      if (!agentBooking) return;
+      launch.href = agentBooking.destination_url;
+      launch.target = "_blank";
+      launch.setAttribute("aria-disabled", "false");
+      status.textContent = "Tracked booking is ready.";
+    })
+    .catch(() => {
+      status.className = "status error";
+      status.textContent = "Unable to prepare your booking link. Please try again.";
+    });
+})();
+</script>
+</main>
+</body>
+</html>`);
+  }
+
   if (url.pathname === REPORTING_PAGE_ROUTE) {
     if (request.method !== "GET") {
       return json(405, { error: "method_not_allowed" }, { "Allow": "GET" });
@@ -1139,6 +1227,33 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
 </main>
 </body>
 </html>`);
+  }
+
+  if (url.pathname === AGENT_BOOKING_LAUNCH_ROUTE) {
+    if (!agentBookingEnabled(env)) {
+      return json(404, { error: "not_found" });
+    }
+    if (request.method !== "GET") {
+      return json(405, { error: "method_not_allowed" }, { "Allow": "GET" });
+    }
+    const origin = request.headers.get("Origin");
+    if (origin !== null && origin !== requireAppOrigin(env)) {
+      return json(403, { error: "forbidden" });
+    }
+    if (
+      url.searchParams.getAll("product").length !== 1 ||
+      [...url.searchParams.keys()].some(key => key !== "product")
+    ) {
+      return json(400, { error: "invalid_input" });
+    }
+    const token = readSessionCookie(request.headers.get("Cookie"));
+    if (!token) return json(401, { error: "unauthenticated" });
+    const result = await getAgentBookingLaunch(
+      env?.CHINAFLOW_EVENTS,
+      token,
+      url.searchParams.get("product")
+    );
+    return json(result.status, result.body);
   }
 
   if (url.pathname === REPORTING_SUMMARY_ROUTE) {
