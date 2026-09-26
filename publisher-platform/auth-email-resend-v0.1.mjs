@@ -1,11 +1,24 @@
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 const FROM = "ChinaFlow <login@auth.getchinaflow.com>";
-export async function sendMagicLinkEmail({ fetchFn = fetch, apiKey, to, token, appOrigin }) {
+export async function sendMagicLinkEmail({
+  fetchFn = fetch,
+  apiKey,
+  to,
+  token,
+  magicLinkId,
+  appOrigin
+}) {
   if (typeof fetchFn !== "function") throw new Error("Fetch unavailable");
   if (typeof apiKey !== "string" || !apiKey) throw new Error("Resend API key unavailable");
   if (typeof to !== "string" || !to) throw new Error("Invalid recipient");
   if (typeof token !== "string" || !/^[0-9a-f]{64}$/.test(token)) {
     throw new Error("Invalid magic-link token");
+  }
+  if (
+    typeof magicLinkId !== "string" ||
+    !/^ml_[0-9a-f-]{36}$/.test(magicLinkId)
+  ) {
+    throw new Error("Invalid magic-link id");
   }
 
   let appUrl;
@@ -31,6 +44,8 @@ export async function sendMagicLinkEmail({ fetchFn = fetch, apiKey, to, token, a
 
   const loginUrl = new URL("/login", appOrigin);
   loginUrl.searchParams.set("token", token);
+  const requestCode = magicLinkId.slice(3, 11);
+  const subject = `Sign in to ChinaFlow [${requestCode}]`;
 
   const result = await fetchFn(RESEND_ENDPOINT, {
     method: "POST",
@@ -41,7 +56,7 @@ export async function sendMagicLinkEmail({ fetchFn = fetch, apiKey, to, token, a
     body: JSON.stringify({
       from: FROM,
       to: [to],
-      subject: "Sign in to ChinaFlow",
+      subject,
       html: `<p>Use the link below to sign in to ChinaFlow.</p><p><a href="${loginUrl.href}">Sign in to ChinaFlow</a></p><p>This link expires in 15 minutes.</p>`,
       text: `Sign in to ChinaFlow: ${loginUrl.href}\n\nThis link expires in 15 minutes.`
     })

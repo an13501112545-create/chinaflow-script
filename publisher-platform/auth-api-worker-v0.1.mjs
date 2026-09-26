@@ -315,6 +315,7 @@ export async function handleAuthRequest(request, env) {
           apiKey: env.RESEND_API_KEY,
           to: email,
           token: magicLink.token,
+          magicLinkId: magicLink.magicLinkId,
           appOrigin
         });
       } catch (error) {
