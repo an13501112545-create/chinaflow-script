@@ -177,6 +177,14 @@ test("configured APP_ORIGIN controls CORS and magic-link destination", async t =
   assert.ok(outbound);
   assert.equal(outbound.url, "https://api.resend.com/emails");
   assert.match(
+    outbound.body.subject,
+    /^Sign in to ChinaFlow · [0-9a-f]{8}$/
+  );
+  assert.doesNotMatch(
+    outbound.body.subject,
+    /[0-9a-f]{64}/
+  );
+  assert.match(
     outbound.body.text,
     /^Sign in to ChinaFlow: https:\/\/publisher\.example\.test\/login\?token=[0-9a-f]{64}\n\n/
   );
