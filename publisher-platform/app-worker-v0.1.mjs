@@ -375,6 +375,16 @@ function verificationRateLimitedResponse() {
 export async function handleAppRequest(request, env) {
   const url = new URL(request.url);
 
+  if (url.pathname === "/") {
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      return json(405, { error: "method_not_allowed" }, { "Allow": "GET, HEAD" });
+    }
+    return new Response(null, {
+      status: 302,
+      headers: { Location: "/login" }
+    });
+  }
+
   if (url.pathname === PUBLISHER_TERMS_ROUTE) {
     if (request.method !== "GET" && request.method !== "HEAD") {
       return json(

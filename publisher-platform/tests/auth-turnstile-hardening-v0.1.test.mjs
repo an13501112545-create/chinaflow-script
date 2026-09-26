@@ -132,6 +132,24 @@ test("Production configs declare Turnstile public and secret bindings", () => {
     false,
     "Turnstile secret must never be stored as a plaintext var"
   );
+
+  assert.equal(
+    app.vars.APP_ORIGIN,
+    "https://publishers.getchinaflow.com",
+    "Production Publisher App must use the branded custom domain as canonical origin"
+  );
+
+  assert.equal(
+    auth.vars.APP_ORIGIN,
+    app.vars.APP_ORIGIN,
+    "Production Auth API must issue magic links and CORS for the branded Publisher origin"
+  );
+
+  assert.deepEqual(
+    app.routes,
+    [{ pattern: "publishers.getchinaflow.com", custom_domain: true }],
+    "Production Publisher App must keep the branded custom-domain route"
+  );
 });
 
 test("login page renders Managed Turnstile and restrictive CSP", async () => {

@@ -13,7 +13,7 @@
   ],
   "vars": {
     "AUTH_ENVIRONMENT": "production",
-    "APP_ORIGIN": "https://chinaflow-publisher-app-v0-1.an13501112545.workers.dev"
+    "APP_ORIGIN": "https://publishers.getchinaflow.com"
   },
   "secrets": {
     "required": [

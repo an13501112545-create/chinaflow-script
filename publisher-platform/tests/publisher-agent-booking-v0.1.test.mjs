@@ -219,6 +219,26 @@ test("agent booking API route is gated, same-origin and session-derived", async 
   }
 });
 
+test("publisher root redirects to branded login", async () => {
+  const env = { APP_ORIGIN: ORIGIN };
+
+  for (const method of ["GET", "HEAD"]) {
+    const response = await handleAppRequest(
+      new Request(ORIGIN + "/", { method }),
+      env
+    );
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("Location"), "/login");
+  }
+
+  const rejected = await handleAppRequest(
+    new Request(ORIGIN + "/", { method: "POST" }),
+    env
+  );
+  assert.equal(rejected.status, 405);
+  assert.equal(rejected.headers.get("Allow"), "GET, HEAD");
+});
+
 test("agent booking page is gated and keeps supplier credentials out of static HTML", async () => {
   const darkEnv = {
     APP_ORIGIN: ORIGIN,
