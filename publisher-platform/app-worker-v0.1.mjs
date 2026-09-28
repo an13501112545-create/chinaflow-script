@@ -125,6 +125,7 @@ const REPORTING_SUMMARY_ROUTE = "/api/reporting/summary";
 const REPORTING_PAGE_ROUTE = "/reporting";
 const AGENT_BOOKING_LAUNCH_ROUTE = "/api/agent-booking/launch";
 const AGENT_BOOKING_PAGE_ROUTE = "/agent-booking";
+const ZH_AGENT_BOOKING_PAGE_ROUTE = "/zh/agent-booking";
 const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 const TURNSTILE_ACTION = "publisher_magic_link";
 const TURNSTILE_SITE_KEY_PLACEHOLDER =
@@ -865,7 +866,8 @@ a{color:#0b7285}
 </html>`);
   }
 
-  if (url.pathname === AGENT_BOOKING_PAGE_ROUTE) {
+  if (url.pathname === AGENT_BOOKING_PAGE_ROUTE || url.pathname === ZH_AGENT_BOOKING_PAGE_ROUTE) {
+    const zh = url.pathname === ZH_AGENT_BOOKING_PAGE_ROUTE;
     if (request.method !== "GET") {
       return json(405, { error: "method_not_allowed" }, { "Allow": "GET" });
     }
@@ -874,11 +876,11 @@ a{color:#0b7285}
     }
 
     return html(200, `<!doctype html>
-<html lang="en">
+<html lang="${zh ? "zh-CN" : "en"}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ChinaFlow Agent Booking</title>
+<title>${zh ? "ChinaFlow 代客订酒店" : "ChinaFlow Agent Booking"}</title>
 <style>
 :root{color-scheme:light}
 *{box-sizing:border-box}
@@ -898,15 +900,15 @@ p{line-height:1.55;color:#52606d}
 </head>
 <body>
 <main>
-<a class="toplink" href="/reporting">← Publisher reporting</a>
-<h1>Agent Booking</h1>
-<p>Use the same ChinaFlow publisher account and attribution system when your team books for clients.</p>
+<a class="toplink" href="/reporting">${zh ? "← 返回合作伙伴报表" : "← Publisher reporting"}</a>
+<h1>${zh ? "代客订酒店" : "Agent Booking"}</h1>
+<p>${zh ? "团队为客户代订时，继续使用同一个 ChinaFlow 合作伙伴账户和归因系统。" : "Use the same ChinaFlow publisher account and attribution system when your team books for clients."}</p>
 <section class="card">
-  <h2>Book hotels for your clients</h2>
-  <p>Open Trip.com through your ChinaFlow tracked booking path, then search and book normally for your customer.</p>
-  <a id="hotel-launch" class="action" href="#" aria-disabled="true" rel="noopener">Open Trip.com</a>
-  <p id="status" class="status" role="status">Preparing your tracked booking link…</p>
-  <p class="fine">Only eligible completed supplier bookings can become commissionable. ChinaFlow never asks for your client's payment card or passport details.</p>
+  <h2>${zh ? "为客户预订酒店" : "Book hotels for your clients"}</h2>
+  <p>${zh ? "通过 ChinaFlow 专属追踪路径打开 Trip.com，然后像平常一样为客户搜索并预订酒店。" : "Open Trip.com through your ChinaFlow tracked booking path, then search and book normally for your customer."}</p>
+  <a id="hotel-launch" class="action" href="#" aria-disabled="true" rel="noopener">${zh ? "打开 Trip.com" : "Open Trip.com"}</a>
+  <p id="status" class="status" role="status">${zh ? "正在准备专属追踪预订链接…" : "Preparing your tracked booking link…"}</p>
+  <p class="fine">${zh ? "只有符合条件并完成的供应商订单才可能产生佣金。ChinaFlow 不会要求您提供客户的银行卡或护照资料。" : "Only eligible completed supplier bookings can become commissionable. ChinaFlow never asks for your client's payment card or passport details."}</p>
 </section>
 <script>
 (() => {
@@ -916,15 +918,15 @@ p{line-height:1.55;color:#52606d}
   fetch("/api/agent-booking/launch?product=hotel")
     .then(async response => {
       if (response.status === 401) {
-        location.assign("/login");
+        location.assign(zh ? "/zh/login" : "/login");
         return null;
       }
       const body = await response.json().catch(() => ({}));
       if (!response.ok || !body.agent_booking?.destination_url) {
         status.className = "status error";
         status.textContent = response.status === 404
-          ? "Agent Booking is not enabled for this publisher account."
-          : "Unable to prepare your booking link. Please try again.";
+          ? (zh ? "此合作伙伴账户尚未开通代客预订功能。" : "Agent Booking is not enabled for this publisher account.")
+          : (zh ? "暂时无法生成预订链接，请稍后重试。" : "Unable to prepare your booking link. Please try again.");
         return null;
       }
       return body.agent_booking;
@@ -934,7 +936,7 @@ p{line-height:1.55;color:#52606d}
       launch.href = agentBooking.destination_url;
       launch.target = "_blank";
       launch.setAttribute("aria-disabled", "false");
-      status.textContent = "Tracked booking is ready.";
+      status.textContent = zh ? "专属追踪预订链接已准备好。" : "Tracked booking is ready.";
     })
     .catch(() => {
       status.className = "status error";
