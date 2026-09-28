@@ -918,15 +918,15 @@ p{line-height:1.55;color:#52606d}
   fetch("/api/agent-booking/launch?product=hotel")
     .then(async response => {
       if (response.status === 401) {
-        location.assign(zh ? "/zh/login" : "/login");
+        location.assign("${zh ? "/zh/login" : "/login"}");
         return null;
       }
       const body = await response.json().catch(() => ({}));
       if (!response.ok || !body.agent_booking?.destination_url) {
         status.className = "status error";
         status.textContent = response.status === 404
-          ? (zh ? "此合作伙伴账户尚未开通代客预订功能。" : "Agent Booking is not enabled for this publisher account.")
-          : (zh ? "暂时无法生成预订链接，请稍后重试。" : "Unable to prepare your booking link. Please try again.");
+          ? "${zh ? "当前合作伙伴账户尚未满足代客预订开通条件。请先完成账户验证和合作伙伴入驻流程。" : "This publisher account is not yet eligible for Agent Booking. Complete account verification and onboarding first."}"
+          : "${zh ? "暂时无法生成预订链接，请稍后重试。" : "Unable to prepare your booking link. Please try again."}";
         return null;
       }
       return body.agent_booking;
@@ -936,11 +936,11 @@ p{line-height:1.55;color:#52606d}
       launch.href = agentBooking.destination_url;
       launch.target = "_blank";
       launch.setAttribute("aria-disabled", "false");
-      status.textContent = zh ? "专属追踪预订链接已准备好。" : "Tracked booking is ready.";
+      status.textContent = "${zh ? "专属追踪预订链接已准备好。" : "Tracked booking is ready."}";
     })
     .catch(() => {
       status.className = "status error";
-      status.textContent = "Unable to prepare your booking link. Please try again.";
+      status.textContent = "${zh ? "暂时无法生成预订链接，请稍后重试。" : "Unable to prepare your booking link. Please try again."}";
     });
 })();
 </script>
