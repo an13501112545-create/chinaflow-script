@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
 import { derivePublisherLifecycleAction } from "../publisher-lifecycle-action-v0.1.mjs";
+import { buildPublisherOperatorWorkQueue } from "../publisher-operator-work-queue-v0.1.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const PROD_CONFIG = "collector/wrangler.production.jsonc";
@@ -94,6 +95,10 @@ const snapshots = rows.map(row => ({
   ...derivePublisherLifecycleAction(row)
 }));
 
+const operatorWorkQueue = buildPublisherOperatorWorkQueue(snapshots);
+
 console.log(JSON.stringify(snapshots, null, 2));
+console.log("OPERATOR_WORK_QUEUE=" + JSON.stringify(operatorWorkQueue, null, 2));
+console.log(`OPERATOR_WORK_QUEUE_COUNT=${operatorWorkQueue.length}`);
 console.log(`PUBLISHER_COUNT=${snapshots.length}`);
 console.log("PRODUCTION_PUBLISHER_LIFECYCLE_SNAPSHOT_READ_ONLY=PASS");
