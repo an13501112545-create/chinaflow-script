@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import process from "node:process";
+import { derivePublisherLifecycleAction } from "../publisher-lifecycle-action-v0.1.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const PROD_CONFIG = "collector/wrangler.production.jsonc";
@@ -88,6 +89,11 @@ LEFT JOIN (
 ORDER BY p.created_at, p.publisher_id
 `);
 
-console.log(JSON.stringify(rows, null, 2));
-console.log(`PUBLISHER_COUNT=${rows.length}`);
+const snapshots = rows.map(row => ({
+  ...row,
+  ...derivePublisherLifecycleAction(row)
+}));
+
+console.log(JSON.stringify(snapshots, null, 2));
+console.log(`PUBLISHER_COUNT=${snapshots.length}`);
 console.log("PRODUCTION_PUBLISHER_LIFECYCLE_SNAPSHOT_READ_ONLY=PASS");
