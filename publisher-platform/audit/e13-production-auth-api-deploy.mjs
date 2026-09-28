@@ -23,7 +23,7 @@ const WORKER = "chinaflow-auth-api-v0-1";
 const URL =
   "https://chinaflow-auth-api-v0-1.an13501112545.workers.dev";
 const APP_ORIGIN =
-  "https://chinaflow-publisher-app-v0-1.an13501112545.workers.dev";
+  "https://publishers.getchinaflow.com";
 const AUDITED_BASELINE_HEAD =
   "2bd7e070b8282b171ed266980dc9fcdcd61229ed";
 const ONE_TIME_ENV = "CHINAFLOW_RESEND_API_KEY_ONCE";
