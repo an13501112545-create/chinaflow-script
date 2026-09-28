@@ -6,7 +6,8 @@ export async function sendMagicLinkEmail({
   to,
   token,
   magicLinkId,
-  appOrigin
+  appOrigin,
+  locale
 }) {
   if (typeof fetchFn !== "function") throw new Error("Fetch unavailable");
   if (typeof apiKey !== "string" || !apiKey) throw new Error("Resend API key unavailable");
@@ -42,7 +43,7 @@ export async function sendMagicLinkEmail({
     throw new Error("Invalid app origin");
   }
 
-  const loginUrl = new URL("/login", appOrigin);
+  const loginUrl = new URL(locale === "zh" ? "/zh/login" : "/login", appOrigin);
   loginUrl.searchParams.set("token", token);
   const requestCode = magicLinkId.slice(3, 11);
   const subject = `Sign in to ChinaFlow [${requestCode}]`;

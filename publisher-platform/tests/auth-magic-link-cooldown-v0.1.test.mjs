@@ -240,3 +240,63 @@ test("new links retain single-use login and session security", async t => {
   assert.equal(await completeMagicLinkLogin(db, other.token, new Date(other.expiresAt)), null);
   assert.equal(await completeMagicLinkLogin(db, "invalid"), null);
 });
+
+test("Chinese locale uses the whitelisted /zh/login magic-link destination", async t => {
+  const { db } = fixture(t);
+  const appOrigin = "https://publisher.example.test";
+  let outbound = null;
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async (url, init) => {
+    outbound = { url: String(url), body: JSON.parse(init.body) };
+    return Response.json({ id: "mock-email" });
+  };
+  const env = {
+    CHINAFLOW_EVENTS: db,
+    APP_ORIGIN: appOrigin,
+    AUTH_ENVIRONMENT: "test",
+    AUTH_TEST_EMAIL: "test@example.com",
+    RESEND_API_KEY: "mock-key",
+    MAGIC_LINK_IP_RATE_LIMITER: { async limit() { return { success: true }; } },
+    MAGIC_LINK_EMAIL_RATE_LIMITER: { async limit() { return { success: true }; } }
+  };
+  const result = await worker.fetch(new Request("https://auth.example/v1/auth/magic-link", {
+    method: "POST",
+    headers: { Origin: appOrigin, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "test@example.com", locale: "zh" })
+  }), env);
+  assert.equal(result.status, 202);
+  assert.ok(outbound);
+  assert.match(outbound.body.text, /https:\/\/publisher\.example\.test\/zh\/login\?token=[0-9a-f]{64}/);
+  assert.match(outbound.body.html, /href="https:\/\/publisher\.example\.test\/zh\/login\?token=[0-9a-f]{64}"/);
+});
+
+test("unrecognized locale cannot control magic-link destination", async t => {
+  const { db } = fixture(t);
+  const appOrigin = "https://publisher.example.test";
+  let outbound = null;
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async (url, init) => {
+    outbound = { url: String(url), body: JSON.parse(init.body) };
+    return Response.json({ id: "mock-email" });
+  };
+  const env = {
+    CHINAFLOW_EVENTS: db,
+    APP_ORIGIN: appOrigin,
+    AUTH_ENVIRONMENT: "test",
+    AUTH_TEST_EMAIL: "test@example.com",
+    RESEND_API_KEY: "mock-key",
+    MAGIC_LINK_IP_RATE_LIMITER: { async limit() { return { success: true }; } },
+    MAGIC_LINK_EMAIL_RATE_LIMITER: { async limit() { return { success: true }; } }
+  };
+  const result = await worker.fetch(new Request("https://auth.example/v1/auth/magic-link", {
+    method: "POST",
+    headers: { Origin: appOrigin, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "test@example.com", locale: "https://evil.example/steal" })
+  }), env);
+  assert.equal(result.status, 202);
+  assert.ok(outbound);
+  assert.match(outbound.body.text, /https:\/\/publisher\.example\.test\/login\?token=[0-9a-f]{64}/);
+  assert.ok(!outbound.body.text.includes("evil.example"));
+});

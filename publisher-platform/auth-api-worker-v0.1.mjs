@@ -316,7 +316,8 @@ export async function handleAuthRequest(request, env) {
           to: email,
           token: magicLink.token,
           magicLinkId: magicLink.magicLinkId,
-          appOrigin
+          appOrigin,
+          locale: body?.locale === "zh" ? "zh" : undefined
         });
       } catch (error) {
         console.error("[ChinaFlow Auth API v0.1] Magic-link email delivery failed", error);

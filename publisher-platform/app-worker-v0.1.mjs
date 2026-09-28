@@ -114,9 +114,11 @@ function requireRuntimeOrigin(env) {
 const CONSUME_ROUTE = "/api/auth/consume";
 const SESSION_ROUTE = "/api/auth/session";
 const LOGIN_ROUTE = "/login";
+const ZH_LOGIN_ROUTE = "/zh/login";
 const LOGOUT_ROUTE = "/api/auth/logout";
 const PUBLISHER_TERMS_ROUTE = "/legal/chinaflow-publisher-terms-v1";
 const ONBOARDING_ROUTE = "/onboarding";
+const ZH_ONBOARDING_ROUTE = "/zh/onboarding";
 const VERIFY_INSTALL_ROUTE = "/api/onboarding/verify-install";
 const RELEASE_HOSTNAME_ROUTE = "/api/onboarding/release-hostname";
 const REPORTING_SUMMARY_ROUTE = "/api/reporting/summary";
@@ -402,7 +404,7 @@ export async function handleAppRequest(request, env) {
     const content = renderLegalMarkdown(source.default);
 
     const document = `<!doctype html>
-<html lang="en">
+<html lang="${zh ? "zh-CN" : "en"}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -429,7 +431,8 @@ ${content}
     return legalHtml(200, request.method === "HEAD" ? null : document);
   }
 
-  if (url.pathname === ONBOARDING_ROUTE) {
+  if (url.pathname === ONBOARDING_ROUTE || url.pathname === ZH_ONBOARDING_ROUTE) {
+    const zh = url.pathname === ZH_ONBOARDING_ROUTE;
     if (request.method !== "GET") {
       return json(405, { error: "method_not_allowed" }, { "Allow": "GET" });
     }
@@ -437,11 +440,11 @@ ${content}
     const runtimeOrigin = requireRuntimeOrigin(env);
 
     return html(200, `<!doctype html>
-<html lang="en">
+<html lang="${zh ? "zh-CN" : "en"}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ChinaFlow Publisher Onboarding</title>
+<title>${zh ? "ChinaFlow 发布商设置" : "ChinaFlow Publisher Onboarding"}</title>
 <style>
 body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f6f9fb;color:#15202b;margin:0}
 main{max-width:720px;margin:48px auto;padding:0 20px 64px}
@@ -462,53 +465,53 @@ a{color:#0b7285}
 </head>
 <body>
 <main>
-<h1>Set up ChinaFlow</h1>
-<p>Connect your approved website to ChinaFlow.</p>
+<h1>${zh ? "设置 ChinaFlow" : "Set up ChinaFlow"}</h1>
+<p>${zh ? "将你的网站连接到 ChinaFlow。" : "Connect your approved website to ChinaFlow."}</p>
 
 <section id="loading" class="card">
-  <p>Checking your account…</p>
+  <p>${zh ? "正在检查你的账户…" : "Checking your account…"}</p>
 </section>
 
 <section id="create" class="card hidden">
-  <h2>Create your publisher profile</h2>
+  <h2>${zh ? "创建发布商资料" : "Create your publisher profile"}</h2>
   <form id="draft-form">
-    <label for="display_name">Publisher name</label>
+    <label for="display_name">${zh ? "发布商名称" : "Publisher name"}</label>
     <input id="display_name" name="display_name" maxlength="200" required>
 
-    <label for="hostname">Primary website hostname</label>
+    <label for="hostname">${zh ? "主要网站域名" : "Primary website hostname"}</label>
     <input id="hostname" name="hostname" placeholder="example.com" required>
 
-    <button id="create-button" type="submit">Create publisher</button>
+    <button id="create-button" type="submit">${zh ? "创建发布商" : "Create publisher"}</button>
     <p id="create-status" class="status"></p>
   </form>
 </section>
 
 <section id="terms" class="card hidden">
-  <h2>Publisher Program Terms</h2>
+  <h2>${zh ? "发布商计划条款" : "Publisher Program Terms"}</h2>
   <p>
-    Review the
+    ${zh ? "请阅读" : "Review the"}
     <a href="/legal/chinaflow-publisher-terms-v1" target="_blank" rel="noopener">
-      ChinaFlow Publisher Program Terms
-    </a>.
+      ${zh ? "ChinaFlow 发布商计划条款" : "ChinaFlow Publisher Program Terms"}
+    </a>${zh ? "。" : "."}
   </p>
-  <button id="accept-button" type="button">I accept the terms</button>
+  <button id="accept-button" type="button">${zh ? "接受条款" : "I accept the terms"}</button>
   <p id="terms-status" class="status"></p>
 </section>
 
 <section id="install" class="card hidden">
-  <h2>Installation code</h2>
-  <p>Add this script to your approved website.</p>
+  <h2>${zh ? "安装代码" : "Installation code"}</h2>
+  <p>${zh ? "将此脚本添加到你的网站。" : "Add this script to your approved website."}</p>
   <pre id="snippet"></pre>
-  <button id="copy-button" type="button">Copy installation code</button>
+  <button id="copy-button" type="button">${zh ? "复制安装代码" : "Copy installation code"}</button>
   <p id="copy-status" class="status"></p>
-  <button id="verify-button" type="button">Verify installation</button>
+  <button id="verify-button" type="button">${zh ? "验证安装" : "Verify installation"}</button>
   <p id="verify-status" class="status" role="status"></p>
-  <button id="submit-button" class="hidden" type="button">Submit for review</button>
+  <button id="submit-button" class="hidden" type="button">${zh ? "提交审核" : "Submit for review"}</button>
   <p id="submit-status" class="status" role="status"></p>
 </section>
 
 <section id="submitted" class="card hidden">
-  <h2 id="submission-heading">Submitted for review</h2>
+  <h2 id="submission-heading">${zh ? "已提交审核" : "Submitted for review"}</h2>
   <p id="submission-status" role="status"></p>
   <a id="reporting-link" class="action-link hidden" href="/reporting">View reporting</a>
 </section>
@@ -518,6 +521,7 @@ a{color:#0b7285}
 <script>
 (() => {
   const TERMS_VERSION = "chinaflow-publisher-terms-v1";
+  const IS_ZH = ${JSON.stringify(zh)};
   const RUNTIME_ORIGIN = ${JSON.stringify(runtimeOrigin)};
 
   const loading = document.getElementById("loading");
@@ -562,18 +566,18 @@ a{color:#0b7285}
       currentDraft?.primary_domain?.monetization_status === "enabled" &&
       currentDraft?.supplier_site?.provisioning_status === "active"
     ) {
-      submissionHeading.textContent = "ChinaFlow is active";
+      submissionHeading.textContent = (IS_ZH ? "ChinaFlow 已启用" : "ChinaFlow is active");
       submissionStatus.textContent =
-        "Your publisher account is active and monetization is enabled.";
+        (IS_ZH ? "你的发布商账户已启用，商业化功能已开启。" : "Your publisher account is active and monetization is enabled.");
       show(reportingLink);
       show(submitted);
       return;
     }
 
     if (accountStatus === "rejected" || reviewStatus === "rejected") {
-      submissionHeading.textContent = "Application not approved";
+      submissionHeading.textContent = (IS_ZH ? "申请未获批准" : "Application not approved");
       submissionStatus.textContent =
-        "Your publisher application was not approved. Contact ChinaFlow if you need clarification.";
+        (IS_ZH ? "你的发布商申请未获批准。如需了解详情，请联系 ChinaFlow。" : "Your publisher application was not approved. Contact ChinaFlow if you need clarification.");
       show(submitted);
       return;
     }
@@ -583,47 +587,47 @@ a{color:#0b7285}
         currentDraft?.supplier_site?.provisioning_status ?? null;
 
       if (provisioningStatus === "active") {
-        submissionHeading.textContent = "Supplier provisioning complete";
+        submissionHeading.textContent = (IS_ZH ? "供应商配置已完成" : "Supplier provisioning complete");
         submissionStatus.textContent =
-          "Your supplier connection is ready. Account activation is the next step.";
+          (IS_ZH ? "供应商连接已就绪，下一步将启用账户。" : "Your supplier connection is ready. Account activation is the next step.");
         show(submitted);
         return;
       }
 
       if (provisioningStatus === "pending") {
-        submissionHeading.textContent = "Supplier provisioning";
+        submissionHeading.textContent = (IS_ZH ? "正在配置供应商连接" : "Supplier provisioning");
         submissionStatus.textContent =
-          "Your publisher profile has been approved. Supplier provisioning is in progress.";
+          (IS_ZH ? "你的发布商资料已获批准，正在配置供应商连接。" : "Your publisher profile has been approved. Supplier provisioning is in progress.");
         show(submitted);
         return;
       }
 
       if (provisioningStatus === "failed" ||
           provisioningStatus === "disabled") {
-        submissionHeading.textContent = "Supplier provisioning needs attention";
+        submissionHeading.textContent = (IS_ZH ? "供应商配置需要处理" : "Supplier provisioning needs attention");
         submissionStatus.textContent =
-          "Your publisher profile is approved, but supplier provisioning needs review by ChinaFlow.";
+          (IS_ZH ? "你的发布商资料已获批准，但供应商配置需要 ChinaFlow 进一步处理。" : "Your publisher profile is approved, but supplier provisioning needs review by ChinaFlow.");
         show(submitted);
         return;
       }
 
-      submissionHeading.textContent = "Review approved";
+      submissionHeading.textContent = (IS_ZH ? "审核已通过" : "Review approved");
       submissionStatus.textContent =
-        "Your publisher profile has been approved. Supplier provisioning will begin next.";
+        (IS_ZH ? "你的发布商资料已获批准，接下来将开始供应商配置。" : "Your publisher profile has been approved. Supplier provisioning will begin next.");
       show(submitted);
       return;
     }
 
-    submissionHeading.textContent = "Submitted for review";
+    submissionHeading.textContent = (IS_ZH ? "已提交审核" : "Submitted for review");
     submissionStatus.textContent =
-      "Your publisher profile is submitted and pending review.";
+      (IS_ZH ? "你的发布商资料已提交，正在等待审核。" : "Your publisher profile is submitted and pending review.");
     show(submitted);
   }
 
   function showInstallState(state) {
     hide(submitButton);
     if (state?.install_status === "detected" && state?.verification_status === "verified") {
-      verifyStatus.textContent = "Installation verified.";
+      verifyStatus.textContent = (IS_ZH ? "安装验证成功。" : "Installation verified.");
       show(submitButton);
     }
   }
@@ -656,14 +660,14 @@ a{color:#0b7285}
     const response = await fetch("/api/onboarding/terms");
 
     if (!response.ok) {
-      throw new Error("Unable to load publisher terms.");
+      throw new Error((IS_ZH ? "无法加载发布商条款。" : "Unable to load publisher terms."));
     }
 
     const body = await readJson(response);
     const state = body.terms;
 
     if (!state || state.terms_version !== TERMS_VERSION) {
-      throw new Error("Unexpected publisher terms version.");
+      throw new Error((IS_ZH ? "发布商条款版本异常。" : "Unexpected publisher terms version."));
     }
 
     if (state.accepted === true) {
@@ -671,7 +675,7 @@ a{color:#0b7285}
 
       const key = currentDraft?.publisher?.install_public_key;
       if (!key) {
-        throw new Error("Installation key is unavailable.");
+        throw new Error((IS_ZH ? "安装密钥不可用。" : "Installation key is unavailable."));
       }
 
       snippet.textContent = installCode(key);
@@ -696,7 +700,7 @@ a{color:#0b7285}
     }
 
     if (!response.ok) {
-      throw new Error("Unable to load publisher profile.");
+      throw new Error((IS_ZH ? "无法加载发布商资料。" : "Unable to load publisher profile."));
     }
 
     const body = await readJson(response);
@@ -710,7 +714,7 @@ a{color:#0b7285}
     }
 
     if (!currentDraft?.publisher?.install_public_key) {
-      throw new Error("Publisher profile is incomplete.");
+      throw new Error((IS_ZH ? "发布商资料不完整。" : "Publisher profile is incomplete."));
     }
 
     hide(create);
@@ -722,7 +726,7 @@ a{color:#0b7285}
       const session = await fetch("/api/auth/session");
 
       if (!session.ok) {
-        location.assign("/login");
+        location.assign(IS_ZH ? "/zh/login" : "/login");
         return;
       }
 
@@ -730,14 +734,14 @@ a{color:#0b7285}
       await loadDraft();
     } catch {
       hide(loading);
-      fatal.textContent = "Unable to load onboarding. Please try again.";
+      fatal.textContent = (IS_ZH ? "无法加载设置流程，请重试。" : "Unable to load onboarding. Please try again.");
     }
   }
 
   draftForm.addEventListener("submit", async event => {
     event.preventDefault();
     createButton.disabled = true;
-    createStatus.textContent = "Creating publisher…";
+    createStatus.textContent = (IS_ZH ? "正在创建发布商…" : "Creating publisher…");
 
     try {
       const response = await fetch("/api/onboarding/draft", {
@@ -754,8 +758,8 @@ a{color:#0b7285}
       if (!response.ok || !body.draft) {
         createStatus.textContent =
           response.status === 409
-            ? "That website is already registered or conflicts with an existing publisher."
-            : "Unable to create publisher. Check the information and try again.";
+            ? (IS_ZH ? "该网站已注册，或与现有发布商记录冲突。" : "That website is already registered or conflicts with an existing publisher.")
+            : (IS_ZH ? "无法创建发布商，请检查信息后重试。" : "Unable to create publisher. Check the information and try again.");
         return;
       }
 
@@ -764,7 +768,7 @@ a{color:#0b7285}
       hide(create);
       await loadTerms();
     } catch {
-      createStatus.textContent = "Unable to create publisher. Please try again.";
+      createStatus.textContent = (IS_ZH ? "无法创建发布商，请重试。" : "Unable to create publisher. Please try again.");
     } finally {
       createButton.disabled = false;
     }
@@ -772,7 +776,7 @@ a{color:#0b7285}
 
   acceptButton.addEventListener("click", async () => {
     acceptButton.disabled = true;
-    termsStatus.textContent = "Saving acceptance…";
+    termsStatus.textContent = (IS_ZH ? "正在保存条款接受记录…" : "Saving acceptance…");
 
     try {
       const response = await fetch("/api/onboarding/terms", {
@@ -787,14 +791,14 @@ a{color:#0b7285}
       const body = await readJson(response);
 
       if (!response.ok || body?.terms?.terms_version !== TERMS_VERSION) {
-        termsStatus.textContent = "Unable to accept the terms. Please try again.";
+        termsStatus.textContent = (IS_ZH ? "无法接受条款，请重试。" : "Unable to accept the terms. Please try again.");
         return;
       }
 
       termsStatus.textContent = "";
       await loadTerms();
     } catch {
-      termsStatus.textContent = "Unable to accept the terms. Please try again.";
+      termsStatus.textContent = (IS_ZH ? "无法接受条款，请重试。" : "Unable to accept the terms. Please try again.");
     } finally {
       acceptButton.disabled = false;
     }
@@ -804,7 +808,7 @@ a{color:#0b7285}
     verifyButton.disabled = true;
     submitButton.disabled = true;
     hide(submitButton);
-    verifyStatus.textContent = "Checking installation...";
+    verifyStatus.textContent = (IS_ZH ? "正在检查安装…" : "Checking installation...");
     try {
       const response = await fetch("/api/onboarding/verify-install", { method: "POST" });
       const body = await readJson(response);
@@ -812,10 +816,10 @@ a{color:#0b7285}
         throw new Error("Verification unavailable");
       }
       currentDraft.primary_domain = body.verification;
-      verifyStatus.textContent = "Installation not detected. Check your website and try again.";
+      verifyStatus.textContent = (IS_ZH ? "未检测到安装，请检查网站后重试。" : "Installation not detected. Check your website and try again.");
       showInstallState(body.verification);
     } catch {
-      verifyStatus.textContent = "Unable to verify installation. Please try again.";
+      verifyStatus.textContent = (IS_ZH ? "无法验证安装，请重试。" : "Unable to verify installation. Please try again.");
     } finally {
       verifyButton.disabled = false;
       submitButton.disabled = false;
@@ -825,7 +829,7 @@ a{color:#0b7285}
   submitButton.addEventListener("click", async () => {
     submitButton.disabled = true;
     verifyButton.disabled = true;
-    submitStatus.textContent = "Submitting...";
+    submitStatus.textContent = (IS_ZH ? "正在提交…" : "Submitting...");
     try {
       const response = await fetch("/api/onboarding/submit", { method: "POST" });
       const body = await readJson(response);
@@ -837,7 +841,7 @@ a{color:#0b7285}
       currentDraft.primary_domain.review_status = "pending";
       showReviewState();
     } catch {
-      submitStatus.textContent = "Unable to submit. Refresh your profile, verify installation, and try again.";
+      submitStatus.textContent = (IS_ZH ? "无法提交。请刷新资料、确认安装已验证后重试。" : "Unable to submit. Refresh your profile, verify installation, and try again.");
     } finally {
       submitButton.disabled = false;
       verifyButton.disabled = false;
@@ -847,9 +851,9 @@ a{color:#0b7285}
   copyButton.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(snippet.textContent);
-      copyStatus.textContent = "Installation code copied.";
+      copyStatus.textContent = (IS_ZH ? "安装代码已复制。" : "Installation code copied.");
     } catch {
-      copyStatus.textContent = "Copy failed. Select the code above and copy it manually.";
+      copyStatus.textContent = (IS_ZH ? "复制失败，请选择上方代码并手动复制。" : "Copy failed. Select the code above and copy it manually.");
     }
   });
 
@@ -1459,7 +1463,8 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
     return json(result.status, result.body);
   }
 
-  if (url.pathname === LOGIN_ROUTE) {
+  if (url.pathname === LOGIN_ROUTE || url.pathname === ZH_LOGIN_ROUTE) {
+    const zh = url.pathname === ZH_LOGIN_ROUTE;
     if (request.method !== "GET") {
       return json(405, { error: "method_not_allowed" });
     }
@@ -1469,11 +1474,11 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
       readTurnstileSiteKey(env);
 
     return html(200, `<!doctype html>
-<html lang="en">
+<html lang="${zh ? "zh-CN" : "en"}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sign in to ChinaFlow</title>
+<title>${zh ? "登录 ChinaFlow" : "Sign in to ChinaFlow"}</title>
 <style>
 body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:520px;margin:80px auto;padding:24px;color:#15202b}
 h1{font-size:28px;margin-bottom:12px}
@@ -1490,21 +1495,22 @@ ${turnstileSiteKey
   : ""}
 </head>
 <body>
-<h1>Sign in to ChinaFlow</h1>
-<p id="message">Checking your sign-in link…</p>
+<h1>${zh ? "登录 ChinaFlow" : "Sign in to ChinaFlow"}</h1>
+<p id="message">${zh ? "正在检查登录链接…" : "Checking your sign-in link…"}</p>
 <form id="request-link" hidden>
-  <label for="email">Email address</label>
+  <label for="email">${zh ? "邮箱地址" : "Email address"}</label>
   <input id="email" type="email" autocomplete="email" required>
   ${turnstileSiteKey
     ? `<div id="turnstile-widget" class="cf-turnstile" data-sitekey="${turnstileSiteKey}" data-action="${TURNSTILE_ACTION}"></div>`
     : ""}
-  <button id="send-link" type="submit">Email me a sign-in link</button>
+  <button id="send-link" type="submit">${zh ? "发送登录链接" : "Email me a sign-in link"}</button>
 </form>
-<button id="continue" hidden>Continue sign in</button>
+<button id="continue" hidden>${zh ? "继续登录" : "Continue sign in"}</button>
 <p id="status"></p>
 <script>
 (() => {
   const authOrigin = ${JSON.stringify(authOrigin)};
+  const IS_ZH = ${JSON.stringify(zh)};
   const turnstileSiteKey =
     ${JSON.stringify(turnstileSiteKey)};
   const params =
@@ -1520,11 +1526,12 @@ ${turnstileSiteKey
   form.addEventListener("submit", async event => {
     event.preventDefault();
     sendLink.disabled = true;
-    status.textContent = "Sending sign-in link…";
+    status.textContent = (IS_ZH ? "正在发送登录链接…" : "Sending sign-in link…");
 
     try {
       const payload = {
-        email: email.value
+        email: email.value,
+        ...(IS_ZH ? { locale: "zh" } : {})
       };
 
       if (turnstileSiteKey) {
@@ -1538,7 +1545,7 @@ ${turnstileSiteKey
 
         if (!turnstileToken) {
           status.textContent =
-            "Please complete the security check.";
+            (IS_ZH ? "请完成安全验证。" : "Please complete the security check.");
           return;
         }
 
@@ -1558,13 +1565,13 @@ ${turnstileSiteKey
       );
 
       if (!response.ok) {
-        status.textContent = "Unable to send a sign-in link. Please check your email address.";
+        status.textContent = (IS_ZH ? "无法发送登录链接，请检查邮箱地址。" : "Unable to send a sign-in link. Please check your email address.");
         return;
       }
 
-      status.textContent = "Check your email for a secure ChinaFlow sign-in link.";
+      status.textContent = (IS_ZH ? "请检查邮箱中的 ChinaFlow 安全登录链接。" : "Check your email for a secure ChinaFlow sign-in link.");
     } catch {
-      status.textContent = "Unable to send a sign-in link. Please try again.";
+      status.textContent = (IS_ZH ? "无法发送登录链接，请重试。" : "Unable to send a sign-in link. Please try again.");
     } finally {
       if (
         turnstileSiteKey &&
@@ -1579,13 +1586,13 @@ ${turnstileSiteKey
   });
 
   if (token) {
-    history.replaceState({}, "", "/login");
-    message.textContent = "Your secure sign-in link is ready.";
+    history.replaceState({}, "", IS_ZH ? "/zh/login" : "/login");
+    message.textContent = (IS_ZH ? "安全登录链接已就绪。" : "Your secure sign-in link is ready.");
     button.hidden = false;
 
     button.addEventListener("click", async () => {
       button.disabled = true;
-      status.textContent = "Signing you in…";
+      status.textContent = (IS_ZH ? "正在登录…" : "Signing you in…");
 
       try {
         const response = await fetch("/api/auth/consume", {
@@ -1595,21 +1602,21 @@ ${turnstileSiteKey
         });
 
         if (!response.ok) {
-          status.textContent = "This sign-in link is invalid or has expired.";
+          status.textContent = (IS_ZH ? "此登录链接无效或已过期。" : "This sign-in link is invalid or has expired.");
           return;
         }
 
         const session = await fetch("/api/auth/session");
 
         if (!session.ok) {
-          status.textContent = "Sign-in succeeded, but the session could not be verified.";
+          status.textContent = (IS_ZH ? "登录成功，但无法验证会话。" : "Sign-in succeeded, but the session could not be verified.");
           return;
         }
 
-        location.assign("/onboarding");
+        location.assign(IS_ZH ? "/zh/onboarding" : "/onboarding");
         return;
       } catch {
-        status.textContent = "Unable to sign in. Please try again.";
+        status.textContent = (IS_ZH ? "无法登录，请重试。" : "Unable to sign in. Please try again.");
       } finally {
         button.disabled = false;
       }
@@ -1621,14 +1628,14 @@ ${turnstileSiteKey
   fetch("/api/auth/session")
     .then(async response => {
       if (response.ok) {
-        message.textContent = "You are already signed in to ChinaFlow.";
+        message.textContent = (IS_ZH ? "你已登录 ChinaFlow。" : "You are already signed in to ChinaFlow.");
       } else {
-        message.textContent = "Enter your email to receive a secure sign-in link.";
+        message.textContent = (IS_ZH ? "输入邮箱地址以接收安全登录链接。" : "Enter your email to receive a secure sign-in link.");
         form.hidden = false;
       }
     })
     .catch(() => {
-      message.textContent = "Enter your email to receive a secure sign-in link.";
+      message.textContent = (IS_ZH ? "输入邮箱地址以接收安全登录链接。" : "Enter your email to receive a secure sign-in link.");
       form.hidden = false;
     });
 })();
