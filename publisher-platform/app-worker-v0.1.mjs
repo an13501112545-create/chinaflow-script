@@ -1,4 +1,6 @@
 import { submitOnboarding } from "./onboarding-submit-v0.1.mjs";
+import { handleOutreachClickRoute } from "./outreach-click-route-v0.1.mjs";
+import { readOutreachCookie } from "./outreach-cookie-v0.1.mjs";
 import { readTermsInput, getOnboardingTerms, acceptOnboardingTerms } from "./onboarding-terms-v0.1.mjs";
 import { readDraftInput, getOnboardingDraft, createOnboardingDraft } from "./onboarding-draft-v0.1.mjs";
 import { completeMagicLinkLogin } from "./auth-login-service-v0.1.mjs";
@@ -377,6 +379,9 @@ function verificationRateLimitedResponse() {
 
 export async function handleAppRequest(request, env) {
   const url = new URL(request.url);
+
+  const outreachResponse = await handleOutreachClickRoute(request, env?.CHINAFLOW_EVENTS);
+  if (outreachResponse) return outreachResponse;
 
   if (url.pathname === "/") {
     if (request.method !== "GET" && request.method !== "HEAD") {
@@ -1461,7 +1466,8 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
     }
     const input = await readDraftInput(request);
     if (!input) return json(400, { error: "invalid_input" });
-    const result = await createOnboardingDraft(db, token, input);
+    const outreachToken = readOutreachCookie(request.headers.get("Cookie"));
+    const result = await createOnboardingDraft(db, token, input, outreachToken);
     return json(result.status, result.body);
   }
 

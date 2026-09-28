@@ -1,4 +1,5 @@
 import { validateSession } from "./auth-session-validate-v0.1.mjs";
+import { hashToken } from "./auth-token-v0.1.mjs";
 import { generateInstallPublicKey } from "./install-public-key-v0.1.mjs";
 
 export function normalizeOnboardingHostname(value) {
@@ -106,11 +107,13 @@ export async function getOnboardingDraft(database, token) {
   return draft ? { status: 200, body: { draft } } : { status: 404, body: { error: "not_found" } };
 }
 
-export async function createOnboardingDraft(database, token, input) {
+export async function createOnboardingDraft(database, token, input, outreachToken = null) {
   const session = await validateSession(database, token);
   if (!session) return { status: 401, body: { error: "unauthenticated" } };
   const valid = validateDraftInput(input);
   if (!valid) return { status: 400, body: { error: "invalid_input" } };
+  const outreachTokenHash = typeof outreachToken === "string" && /^[0-9a-f]{64}$/.test(outreachToken)
+    ? await hashToken(outreachToken) : null;
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const publisherId = `pub_${crypto.randomUUID()}`;
@@ -120,7 +123,7 @@ export async function createOnboardingDraft(database, token, input) {
     const installPublicKey = generateInstallPublicKey();
     let results;
     try {
-      results = await database.batch([
+      const statements = [
         database.prepare(`INSERT INTO publishers (
           publisher_id, slug, display_name, install_public_key
         )
@@ -141,7 +144,17 @@ export async function createOnboardingDraft(database, token, input) {
           SELECT ?, m.publisher_id, ?, 1 FROM publisher_memberships m
           WHERE m.membership_id = ? AND m.publisher_id = ? AND m.user_id = ? AND changes() = 1
         `).bind(domainId, valid.hostname, membershipId, publisherId, session.userId)
-      ]);
+      ];
+      if (outreachTokenHash) {
+        statements.push(database.prepare(`UPDATE outreach_attributions
+          SET publisher_id = ?, bound_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
+              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+          WHERE token_hash = ? AND publisher_id IS NULL
+            AND EXISTS (SELECT 1 FROM publisher_memberships
+              WHERE publisher_id = ? AND user_id = ? AND membership_status = 'active')
+        `).bind(publisherId, outreachTokenHash, publisherId, session.userId));
+      }
+      results = await database.batch(statements);
     } catch (error) {
       const field = uniqueField(error);
       if (field === "publishers.publisher_id" ||
