@@ -20,6 +20,6 @@ test("live enabled authorizes only selected prospect into controlled sender",asy
 });
 
 test("non-pass controlled result halts fail-closed",async()=>{
-  const r=await runUnattendedLiveCycle({liveEnabled:true,dependencies:deps,controlledSend:async()=>({status:"ambiguous",sendAttempts:1,sheetWrites:0}),randomInt:()=>6,now:new Date("2026-09-30T12:00:00Z")});
-  assert.equal(r.status,"halted");assert.equal(r.sends,1);assert.equal(r.writes,0);
+  const r=await runUnattendedLiveCycle({liveEnabled:true,dependencies:deps,controlledSend:async()=>({status:"ambiguous",sendAttempts:1,sheetWrites:0,reason:"SEND_AMBIGUOUS"}),randomInt:()=>6,now:new Date("2026-09-30T12:00:00Z")});
+  assert.equal(r.status,"halted");assert.equal(r.sends,1);assert.equal(r.writes,0);assert.equal(r.reason,"SEND_AMBIGUOUS");
 });

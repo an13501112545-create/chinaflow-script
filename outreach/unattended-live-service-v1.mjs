@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { runUnattendedLiveCycle } from "./unattended-live-runner-v1.mjs";
+import { sanitizeOperationalError } from "./foundation-v1.mjs";
 
 const LOCK_PATH = "/run/chinaflow-outreach/unattended-live-service-v1.lock";
 const LIVE_ENABLED = process.env.CHINAFLOW_OUTREACH_LIVE === "YES" && process.env.REAL_SEND_ENABLED === "YES" && process.env.ALLOW_SHEET_WRITE === "YES";
@@ -35,7 +36,8 @@ try {
   while (!stopping) {
     const cycle = await runUnattendedLiveCycle({ liveEnabled: LIVE_ENABLED });
     cycles += 1;
-    console.log(`CYCLE=${cycles} STATUS=${cycle.status} NEXT=${cycle.prospectId ?? "NONE"} SENDS=${cycle.sends ?? 0} WRITES=${cycle.writes ?? 0} LIVE=${LIVE_ENABLED ? "YES" : "NO"}`);
+    const reason = (sanitizeOperationalError(cycle.reason ?? "NONE") || "NONE").replace(/\s+/g, "_");
+    console.log(`CYCLE=${cycles} STATUS=${cycle.status} NEXT=${cycle.prospectId ?? "NONE"} SENDS=${cycle.sends ?? 0} WRITES=${cycle.writes ?? 0} REASON=${reason} LIVE=${LIVE_ENABLED ? "YES" : "NO"}`);
     if (cycle.status === "halted") break;
     if (stopping) break;
     await interruptibleSleep((cycle.schedule?.interval ?? 6) * 60 * 1000);

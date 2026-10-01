@@ -42,6 +42,7 @@ export async function runUnattendedLiveCycle({
     schedule,
     sends: controlled.sendAttempts ?? 0,
     writes: controlled.sheetWrites ?? 0,
+    reason: controlled.reason ?? null,
     controlled,
   };
 }
