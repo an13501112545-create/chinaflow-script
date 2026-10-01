@@ -28,6 +28,7 @@ const COLUMN = Object.freeze({
   id: 0,
   publisher: 3,
   email: 13,
+  primaryStatus: 16,
   campaign: 26,
   trackingUrl: 27,
   status: 28,
@@ -37,6 +38,7 @@ const COLUMN = Object.freeze({
 
 const TRACKING_URL_PATTERN = /^https:\/\/publishers\.getchinaflow\.com\/r\/[0-9a-f]{64}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PERMANENT_SUPPRESSION_STATUSES = new Set(["Invalid Email", "Delivery Failed"]);
 const EXPECTED_HEADERS = Object.freeze({
   0: "ID",
   3: "Publisher / Website",
@@ -109,6 +111,7 @@ export function validateProspect(row, rowNumber) {
   const language = String(value(COLUMN.language)).trim();
   const trackingUrl = String(value(COLUMN.trackingUrl)).trim();
   const campaign = String(value(COLUMN.campaign)).trim();
+  const primaryStatus = String(value(COLUMN.primaryStatus)).trim();
   const status = String(value(COLUMN.status)).trim();
   const sentDate = String(value(COLUMN.sentDate)).trim();
 
@@ -119,6 +122,7 @@ export function validateProspect(row, rowNumber) {
   if (language !== "ZH" && language !== "EN") throw new OutreachValidationError(rowNumber, "Language must be exactly ZH or EN");
   if (!TRACKING_URL_PATTERN.test(trackingUrl)) throw new OutreachValidationError(rowNumber, "Tracking URL is invalid");
   if (campaign !== CONFIG.campaign) throw new OutreachValidationError(rowNumber, "Campaign is not exact");
+  if (PERMANENT_SUPPRESSION_STATUSES.has(primaryStatus)) throw new OutreachValidationError(rowNumber, "Primary Status is permanently suppressed");
   if (status !== "Prepared") throw new OutreachValidationError(rowNumber, "Round 2 Status is not exact Prepared");
   if (sentDate) throw new OutreachValidationError(rowNumber, "Round 2 Sent Date is not blank");
 
@@ -129,6 +133,7 @@ export function validateProspect(row, rowNumber) {
     language,
     trackingUrl,
     campaign,
+    primaryStatus,
     status,
     sentDate,
     row: rowNumber,
@@ -137,6 +142,7 @@ export function validateProspect(row, rowNumber) {
 
 export function isEligible(row) {
   return String(row[COLUMN.campaign] ?? "").trim() === CONFIG.campaign
+    && !PERMANENT_SUPPRESSION_STATUSES.has(String(row[COLUMN.primaryStatus] ?? "").trim())
     && String(row[COLUMN.status] ?? "").trim() === "Prepared"
     && isBlank(row[COLUMN.sentDate]);
 }

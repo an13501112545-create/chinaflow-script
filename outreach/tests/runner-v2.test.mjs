@@ -23,6 +23,7 @@ function row({
   id = "prospect-1",
   publisher = "Example <Publisher>",
   email = "owner@example.com",
+  primaryStatus = "",
   campaign = CONFIG.campaign,
   trackingUrl = `https://publishers.getchinaflow.com/r/${"a".repeat(64)}`,
   status = "Prepared",
@@ -33,6 +34,7 @@ function row({
   values[0] = id;
   values[3] = publisher;
   values[13] = email;
+  values[16] = primaryStatus;
   values[26] = campaign;
   values[27] = trackingUrl;
   values[28] = status;
@@ -59,6 +61,12 @@ test("selects the first eligible prospect in stable sheet order only", () => {
 test("Prepared requires blank sent date and exact campaign", () => {
   assert.equal(selectFirstEligible(sheet(row({ sentDate: "2026-09-29" }))).total, 0);
   assert.equal(selectFirstEligible(sheet(row({ campaign: "other" }))).total, 0);
+});
+
+test("permanent delivery failures are never eligible even when Prepared", () => {
+  assert.equal(selectFirstEligible(sheet(row({ primaryStatus: "Invalid Email" }))).total, 0);
+  assert.equal(selectFirstEligible(sheet(row({ primaryStatus: "Delivery Failed" }))).total, 0);
+  assert.equal(selectFirstEligible(sheet(row({ primaryStatus: "Contacted" }))).total, 1);
 });
 
 test("invalid first eligible row fails closed instead of skipping", () => {
