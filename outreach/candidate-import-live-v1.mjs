@@ -4,7 +4,14 @@ import { CONFIG, validateProspect } from "./runner-v2.mjs";
 function assertExactRow(actual, expected) {
   if (!Array.isArray(actual)) throw new Error("Sheet readback missing");
   for (let i = 0; i < 31; i += 1) {
-    if (String(actual[i] ?? "") !== String(expected[i] ?? "")) {
+    const actualText = String(actual[i] ?? "");
+    const expectedText = String(expected[i] ?? "");
+    if (i === 7 && actualText !== "" && expectedText !== "") {
+      const actualNumber = Number(actualText);
+      const expectedNumber = Number(expectedText);
+      if (Number.isFinite(actualNumber) && Number.isFinite(expectedNumber) && actualNumber === expectedNumber) continue;
+    }
+    if (actualText !== expectedText) {
       throw new Error(`Sheet readback mismatch at column ${i + 1}`);
     }
   }

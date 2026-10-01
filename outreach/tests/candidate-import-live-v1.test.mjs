@@ -38,6 +38,20 @@ test("live import writes staging, D1, Prepared in exact order",async()=>{
   assert.deepEqual(calls,["staging","d1","prepared"]);assert.equal(row[28],"Prepared");
 });
 
+test("Google numeric normalization of strategic score preserves exact-row acceptance",async()=>{
+  let row;
+  const scored={...candidate,strategicValueScore:"9.0"};
+  const result=await runCandidateImport({candidate:scored,live:true,env:{CHINAFLOW_CANDIDATE_IMPORT_LIVE:"YES"},dependencies:{
+    readPipelineValues:async()=>[header,existing()],generateToken:()=>token,hashToken:async()=>hash,
+    appendStagingRow:async v=>{row=[...v];return{sheetRow:3}},
+    readSheetRow:async()=>{const out=[...row];out[7]=9;return out},
+    ensureAttribution:async()=>{},readAttribution:async()=>({token_hash:hash}),
+    finalizePreparedRow:async(_n,v)=>{row=[...v]},
+  }});
+  assert.equal(result.status,"prepared");
+  assert.equal(result.writes,3);
+});
+
 test("D1 mismatch leaves row Staging and never finalizes",async()=>{
   let row,finalized=false;
   await assert.rejects(()=>runCandidateImport({candidate,live:true,env:{CHINAFLOW_CANDIDATE_IMPORT_LIVE:"YES"},dependencies:{
