@@ -296,6 +296,8 @@ test("reporting page serves same-origin UI and rejects non-GET methods", async (
   assert.match(response.headers.get("Content-Security-Policy"), /connect-src 'self'/);
   const body = await response.text();
   assert.match(body, /Publisher reporting/);
+  assert.match(body, /href="\/agent-booking"/);
+  assert.match(body, /Book hotels for clients/);
   assert.match(body, /Commercial terms/);
   assert.match(body, /commercial-terms-metrics/);
   assert.match(body, /do not convert supplier-reported commission into Publisher earnings/);

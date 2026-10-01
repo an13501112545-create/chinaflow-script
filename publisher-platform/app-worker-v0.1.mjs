@@ -978,6 +978,8 @@ h1{font-size:30px;margin:0 0 6px}
 h2{font-size:19px;margin:0 0 14px}
 p{line-height:1.5;color:#52606d;margin:6px 0}
 a{color:#0b7285}
+.top-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.primary-link{display:inline-block;padding:10px 14px;border-radius:8px;background:#0b7285;color:#fff;text-decoration:none;font-weight:700}
 .card{background:#fff;border:1px solid #d9e2ec;border-radius:12px;padding:20px;margin:16px 0}
 .filters{display:grid;grid-template-columns:1fr 1fr 1.4fr auto;gap:12px;align-items:end}
 label{display:block;font-size:13px;font-weight:700;color:#52606d;margin-bottom:6px}
@@ -1000,7 +1002,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
 .number{text-align:right;font-variant-numeric:tabular-nums}
 .empty{padding:20px 0;color:#7b8794}
 .badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#e6f7f9;color:#086071;font-size:12px;font-weight:700}
-@media(max-width:760px){.filters,.grid,.metric-grid{grid-template-columns:1fr}.topbar{display:block}.topbar a{display:inline-block;margin-top:8px}}
+@media(max-width:760px){.filters,.grid,.metric-grid{grid-template-columns:1fr}.topbar{display:block}.top-actions{justify-content:flex-start;margin-top:8px}.topbar a{display:inline-block}}
 </style>
 </head>
 <body>
@@ -1010,7 +1012,10 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
     <h1>Publisher reporting</h1>
     <p>Bookings, supplier-reported commission, and confirmed Publisher earnings attributed to your ChinaFlow publisher account.</p>
   </div>
-  <a href="/onboarding">Publisher settings</a>
+  <div class="top-actions">
+    <a class="primary-link" href="/agent-booking">Book hotels for clients</a>
+    <a href="/onboarding">Publisher settings</a>
+  </div>
 </div>
 
 <section class="card">
