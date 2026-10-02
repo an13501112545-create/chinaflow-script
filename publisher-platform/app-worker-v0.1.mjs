@@ -1,5 +1,6 @@
 import { submitOnboarding } from "./onboarding-submit-v0.1.mjs";
 import { handleOutreachClickRoute } from "./outreach-click-route-v0.1.mjs";
+import { recordOutreachLoginArrival, recordOutreachMagicLinkConsumed } from "./outreach-attribution-service-v0.1.mjs";
 import { readOutreachCookie } from "./outreach-cookie-v0.1.mjs";
 import { readTermsInput, getOnboardingTerms, acceptOnboardingTerms } from "./onboarding-terms-v0.1.mjs";
 import { readDraftInput, getOnboardingDraft, createOnboardingDraft } from "./onboarding-draft-v0.1.mjs";
@@ -1487,6 +1488,16 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
     const authOrigin = requireAuthOrigin(env);
     const turnstileSiteKey =
       readTurnstileSiteKey(env);
+    let outreachAttributionId = null;
+    const outreachToken = readOutreachCookie(request.headers.get("Cookie"));
+    if (outreachToken) {
+      try {
+        const observed = await recordOutreachLoginArrival(env?.CHINAFLOW_EVENTS, outreachToken);
+        outreachAttributionId = observed?.attribution_id ?? null;
+      } catch (error) {
+        console.error("[ChinaFlow Publisher App v0.1] Outreach login telemetry failed", error);
+      }
+    }
 
     return html(200, `<!doctype html>
 <html lang="${zh ? "zh-CN" : "en"}">
@@ -1528,6 +1539,7 @@ ${turnstileSiteKey
   const IS_ZH = ${JSON.stringify(zh)};
   const turnstileSiteKey =
     ${JSON.stringify(turnstileSiteKey)};
+  const outreachAttributionId = ${JSON.stringify(outreachAttributionId)};
   const params =
     new URLSearchParams(location.search);
   const token = params.get("token");
@@ -1546,7 +1558,8 @@ ${turnstileSiteKey
     try {
       const payload = {
         email: email.value,
-        ...(IS_ZH ? { locale: "zh" } : {})
+        ...(IS_ZH ? { locale: "zh" } : {}),
+        ...(outreachAttributionId ? { outreach_attribution_id: outreachAttributionId } : {})
       };
 
       if (turnstileSiteKey) {
@@ -1691,6 +1704,15 @@ ${turnstileSiteKey
 
     if (!login) {
       return json(401, { error: "invalid_or_expired_link" });
+    }
+
+    const outreachToken = readOutreachCookie(request.headers.get("Cookie"));
+    if (outreachToken) {
+      try {
+        await recordOutreachMagicLinkConsumed(db, outreachToken);
+      } catch (error) {
+        console.error("[ChinaFlow Publisher App v0.1] Outreach consume telemetry failed", error);
+      }
     }
 
     return json(

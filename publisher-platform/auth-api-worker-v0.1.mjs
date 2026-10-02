@@ -1,5 +1,6 @@
 import { findOrCreateLoginUser } from "./auth-user-store-v0.1.mjs";
 import { createMagicLink } from "./auth-magic-link-store-v0.1.mjs";
+import { recordOutreachMagicLinkRequested } from "./outreach-attribution-service-v0.1.mjs";
 import { sendMagicLinkEmail } from "./auth-email-resend-v0.1.mjs";
 import { completeMagicLinkLogin } from "./auth-login-service-v0.1.mjs";
 
@@ -302,6 +303,20 @@ export async function handleAuthRequest(request, env) {
 
   if (!db || typeof db.prepare !== "function") {
     throw new Error("D1 binding unavailable");
+  }
+
+  const outreachAttributionId =
+    typeof body?.outreach_attribution_id === "string" &&
+    /^oa_[0-9a-f-]{36}$/.test(body.outreach_attribution_id)
+      ? body.outreach_attribution_id
+      : null;
+
+  if (outreachAttributionId) {
+    try {
+      await recordOutreachMagicLinkRequested(db, outreachAttributionId);
+    } catch (error) {
+      console.error("[ChinaFlow Auth API v0.1] Outreach magic-link telemetry failed", error);
+    }
   }
 
   const user = await findOrCreateLoginUser(db, email);
