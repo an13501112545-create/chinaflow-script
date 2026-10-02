@@ -1,0 +1,2 @@
+import assert from "node:assert/strict";import {test} from "node:test";import {runGrowthDaily} from "../growth-daily-cli-v1.mjs";
+test("daily runner snapshots before append",async()=>{const seq=[];const s={version:1,generatedAt:"2026-10-02T00:00:00Z"};const r=await runGrowthDaily({snapshotRunner:async()=>{seq.push("snapshot");return s},append:x=>{seq.push("append");assert.equal(x,s);return{status:"recorded"}}});assert.deepEqual(seq,["snapshot","append"]);assert.equal(r.result.status,"recorded");});
