@@ -13,6 +13,9 @@ export function planReplyActions(events){
     }
     const p=mapping.prospect;
     if(type==="human_reply"){
+      const baselineNext=/^Wait for reply; follow up if no response\.?$/i.test(clean(p.nextAction));
+      const hasCuratedReply=clean(p.replySummary)!=="" || (clean(p.nextAction)!=="" && !baselineNext);
+      if(hasCuratedReply) return Object.freeze({emailId,type,action:"mark_only",reason:"CURATED_REPLY_FIELDS_PRESENT",prospectId:p.id,sheetRow:p.sheetRow,sheetWrite:null});
       const date=clean(event?.date).slice(0,10) || "unknown date";
       const subject=clean(event?.subject).replace(/\s+/g," ").slice(0,180);
       return Object.freeze({

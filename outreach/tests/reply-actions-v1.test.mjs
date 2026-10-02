@@ -17,3 +17,9 @@ test("auto reply and delay are mark-only",()=>{
   for(const type of ["auto_reply","delivery_delay"]){const [a]=planReplyActions([{emailId:"e",type,mapping:mapped()}]);assert.equal(a.action,"mark_only");assert.equal(a.sheetWrite,null);}
 });
 test("unmapped human reply is held and never marked processed",()=>{const [a]=planReplyActions([{emailId:"e",type:"human_reply",mapping:{status:"unmapped"}}]);assert.equal(a.sheetWrite,null);assert.equal(a.action,"manual_mapping_required");assert.equal(a.markProcessed,false);});
+
+test("existing curated reply fields are never overwritten",()=>{
+  const mapping={status:"mapped",prospect:{id:"124",sheetRow:125,status:"Referral Opportunity",replySummary:"Human reply: referral opportunity",nextAction:"Evaluate referral terms"}};
+  const [a]=planReplyActions([{emailId:"pcj",date:"2026-09-30",subject:"Re",type:"human_reply",mapping}]);
+  assert.equal(a.action,"mark_only");assert.equal(a.reason,"CURATED_REPLY_FIELDS_PRESENT");assert.equal(a.sheetWrite,null);
+});

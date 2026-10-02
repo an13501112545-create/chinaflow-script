@@ -26,7 +26,7 @@ export function classifyInboundMessage(message) {
     const permanent=/permanent error|no such user|\b550\b|\b554\b|mail rejected/i.test(combined);
     return Object.freeze({type:delay?"delivery_delay":permanent?"permanent_bounce":"delivery_status",senderEmail,targetEmail:targets[0]??null,subject,body});
   }
-  const auto=/auto[ -]?reply|automatic reply|out of office|away from (?:the )?office|we(?:'|’)ll get back to you shortly|one of our trip advisors will contact you soon/i.test(combined);
+  const auto=/auto[ -]?reply|automatic reply|out of office|away from (?:the )?office|on (?:the )?break for .{0,40}holiday|will not be in (?:the )?office|resume normal office hours|we(?:'|\u2019)ll get back to you shortly|one of our trip advisors will contact you soon/i.test(combined);
   return Object.freeze({type:auto?"auto_reply":"human_reply",senderEmail,targetEmail:null,subject,body});
 }
 
@@ -34,7 +34,7 @@ function prospectRows(values) {
   if (!Array.isArray(values) || !Array.isArray(values[0])) throw new Error("pipeline values missing");
   return values.slice(1).map((row,index)=>({
     id:clean(row[0]), publisher:clean(row[3]), website:clean(row[4]), email:lower(row[13]),
-    status:clean(row[16]), campaign:clean(row[26]), round2Status:clean(row[28]), sentDate:clean(row[29]),
+    status:clean(row[16]), replySummary:clean(row[21]), nextAction:clean(row[22]), campaign:clean(row[26]), round2Status:clean(row[28]), sentDate:clean(row[29]),
     sheetRow:index+2,
   })).filter(x=>x.id);
 }

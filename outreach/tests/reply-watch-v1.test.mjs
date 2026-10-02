@@ -23,6 +23,11 @@ test("classifies delivery delay before permanent-like wording",()=>{
   assert.equal(e.type,"delivery_delay");assert.equal(e.targetEmail,"webmaster@cantontradefair.com");
 });
 
+test("holiday office closure is classified as auto reply",()=>{
+  const e=classifyInboundMessage({sender_email:"info@silkroadtravel.com",subject:"Re: outreach",body:"Currently we are on the break for National Day Holiday, so we will not be in the office during Oct.1-7, will resume normal office hours on Oct. 8."});
+  assert.equal(e.type,"auto_reply");
+});
+
 test("explicit automatic replies do not count as human replies",()=>{
   const a=classifyInboundMessage({sender_email:"contact@yunnanexploration.com",subject:"Charlie Lee Auto Reply",body:"We'll get back to you shortly."});
   const b=classifyInboundMessage({sender_email:"info@tour-beijing.com",subject:"Re: outreach",body:"This is an automatic reply. One of our trip advisors will contact you soon."});
