@@ -1,8 +1,9 @@
 import { planReplyActions } from "./reply-actions-v1.mjs";
 import { createReplyActionProductionAdapters } from "./reply-actions-production-v1.mjs";
 import { markReplyWatchProcessed, runProductionReplyWatch } from "./reply-watch-production-v1.mjs";
+import { enqueueReplyAlert } from "./reply-alerts-v1.mjs";
 
-export async function runReplyOps({live=false,env=process.env,watcher=runProductionReplyWatch,actionAdapters=createReplyActionProductionAdapters({env}),marker=markReplyWatchProcessed}={}){
+export async function runReplyOps({live=false,env=process.env,watcher=runProductionReplyWatch,actionAdapters=createReplyActionProductionAdapters({env}),marker=markReplyWatchProcessed,alerter=enqueueReplyAlert}={}){
   const watch=await watcher();
   const actions=planReplyActions(watch.relevant);
   if(!live) return {mode:"dry_run",watch,actions,writes:0,marked:0};
@@ -13,6 +14,10 @@ export async function runReplyOps({live=false,env=process.env,watcher=runProduct
     if(action.sheetWrite){
       const out=await actionAdapters.writeAction({row:action.sheetRow,fields:action.sheetWrite});
       writes+=out.writes;
+    }
+    if(action.type==="human_reply" && action.prospectId){
+      const source=watch.relevant.find(x=>x.emailId===action.emailId);
+      await alerter({emailId:action.emailId,type:"human_reply",prospectId:action.prospectId,publisher:source?.mapping?.prospect?.publisher??"",receivedAt:source?.date??"",subject:source?.subject??""});
     }
     if(action.markProcessed!==false){
       await marker([action.emailId]);
