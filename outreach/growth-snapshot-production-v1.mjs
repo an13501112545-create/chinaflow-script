@@ -2,6 +2,7 @@ import {execFileSync} from "node:child_process";
 import {createProductionAdapters} from "./production-adapters-v1.mjs";
 import {buildGrowthSnapshot} from "./growth-snapshot-v1.mjs";
 const DB="chinaflow-events-v0-1", CONFIG="collector/wrangler.production.jsonc";
+export const FUNNEL_MEASUREMENT_STARTED_AT="2026-10-02T13:15:00.000Z";
 const NPX=process.env.CHINAFLOW_NPX_PATH||"/home/ubuntu/.nvm/versions/node/v22.23.2/bin/npx";
 function sleep(ms){Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,ms);}
 function assertSelect(sql){const q=sql.trim();if(!/^SELECT\b/i.test(q)||q.slice(0,-1).includes(";"))throw new Error("growth query must be single SELECT");return q;}
@@ -26,6 +27,7 @@ const SUMMARY_SQL=`SELECT
  (SELECT count(*) FROM outreach_attributions WHERE campaign='round2-zh-20260928' AND click_count>0) AS outreach_clicked_prospects,
  (SELECT coalesce(sum(click_count),0) FROM outreach_attributions WHERE campaign='round2-zh-20260928') AS outreach_clicks,
  (SELECT count(*) FROM outreach_attributions WHERE campaign='round2-zh-20260928' AND publisher_id IS NOT NULL) AS outreach_bound_publishers,
+ (SELECT count(*) FROM outreach_attributions WHERE campaign='round2-zh-20260928' AND last_click_at>='${FUNNEL_MEASUREMENT_STARTED_AT}') AS funnel_eligible_clicked_prospects,
  (SELECT count(*) FROM outreach_attributions WHERE campaign='round2-zh-20260928' AND login_count>0) AS outreach_login_prospects,
  (SELECT coalesce(sum(login_count),0) FROM outreach_attributions WHERE campaign='round2-zh-20260928') AS outreach_login_arrivals,
  (SELECT count(*) FROM outreach_attributions WHERE campaign='round2-zh-20260928' AND magic_link_requested_count>0) AS outreach_magic_link_requested_prospects,
