@@ -2,11 +2,11 @@ import { recordOutreachClick } from "./outreach-attribution-service-v0.1.mjs";
 
 const TOKEN_RE = /^[0-9a-f]{64}$/;
 const PREFIX = "/r/";
-const ZH_HOME = "https://getchinaflow.com/zh/";
+const ZH_PARTNER = "https://getchinaflow.com/zh/partner/";
 
 function redirect(cookie) {
   const headers = new Headers({
-    Location: ZH_HOME,
+    Location: ZH_PARTNER,
     "Cache-Control": "no-store",
     "Referrer-Policy": "no-referrer",
     "X-Robots-Tag": "noindex, nofollow"

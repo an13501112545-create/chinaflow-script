@@ -380,8 +380,10 @@ function verificationRateLimitedResponse() {
 export async function handleAppRequest(request, env) {
   const url = new URL(request.url);
 
-  const outreachResponse = await handleOutreachClickRoute(request, env?.CHINAFLOW_EVENTS);
-  if (outreachResponse) return outreachResponse;
+  if (url.pathname.startsWith("/r/")) {
+    const outreachResponse = await handleOutreachClickRoute(request, env?.CHINAFLOW_EVENTS);
+    if (outreachResponse) return outreachResponse;
+  }
 
   if (url.pathname === "/") {
     if (request.method !== "GET" && request.method !== "HEAD") {
@@ -410,7 +412,7 @@ export async function handleAppRequest(request, env) {
     const content = renderLegalMarkdown(source.default);
 
     const document = `<!doctype html>
-<html lang="${zh ? "zh-CN" : "en"}">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1491,7 +1493,7 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:#7b8794}
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${zh ? "登录 ChinaFlow" : "Sign in to ChinaFlow"}</title>
+<title>${zh ? "\u521b\u5efa\u6216\u767b\u5f55 ChinaFlow \u5408\u4f5c\u4f19\u4f34\u8d26\u6237" : "Create or sign in to your ChinaFlow partner account"}</title>
 <style>
 body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:520px;margin:80px auto;padding:24px;color:#15202b}
 h1{font-size:28px;margin-bottom:12px}
@@ -1508,7 +1510,7 @@ ${turnstileSiteKey
   : ""}
 </head>
 <body>
-<h1>${zh ? "登录 ChinaFlow" : "Sign in to ChinaFlow"}</h1>
+<h1>${zh ? "\u521b\u5efa\u6216\u767b\u5f55 ChinaFlow \u5408\u4f5c\u4f19\u4f34\u8d26\u6237" : "Create or sign in to your ChinaFlow partner account"}</h1>
 <p id="message">${zh ? "正在检查登录链接…" : "Checking your sign-in link…"}</p>
 <form id="request-link" hidden>
   <label for="email">${zh ? "邮箱地址" : "Email address"}</label>
@@ -1516,7 +1518,7 @@ ${turnstileSiteKey
   ${turnstileSiteKey
     ? `<div id="turnstile-widget" class="cf-turnstile" data-sitekey="${turnstileSiteKey}" data-action="${TURNSTILE_ACTION}"></div>`
     : ""}
-  <button id="send-link" type="submit">${zh ? "发送登录链接" : "Email me a sign-in link"}</button>
+  <button id="send-link" type="submit">${zh ? "\u53d1\u9001\u5b89\u5168\u767b\u5f55\u94fe\u63a5" : "Email me a secure sign-in link"}</button>
 </form>
 <button id="continue" hidden>${zh ? "继续登录" : "Continue sign in"}</button>
 <p id="status"></p>
@@ -1643,12 +1645,12 @@ ${turnstileSiteKey
       if (response.ok) {
         message.textContent = (IS_ZH ? "你已登录 ChinaFlow。" : "You are already signed in to ChinaFlow.");
       } else {
-        message.textContent = (IS_ZH ? "输入邮箱地址以接收安全登录链接。" : "Enter your email to receive a secure sign-in link.");
+        message.textContent = (IS_ZH ? "\u9996\u6b21\u4f7f\u7528\u65e0\u9700\u5148\u6ce8\u518c\u3002\u8f93\u5165\u5de5\u4f5c\u90ae\u7bb1\uff0c\u6211\u4eec\u4f1a\u53d1\u9001\u5b89\u5168\u767b\u5f55\u94fe\u63a5\u5e76\u5f15\u5bfc\u4f60\u521b\u5efa\u5408\u4f5c\u4f19\u4f34\u8d44\u6599\u3002" : "New here? Enter your work email to receive a secure sign-in link and create your partner profile.");
         form.hidden = false;
       }
     })
     .catch(() => {
-      message.textContent = (IS_ZH ? "输入邮箱地址以接收安全登录链接。" : "Enter your email to receive a secure sign-in link.");
+      message.textContent = (IS_ZH ? "\u9996\u6b21\u4f7f\u7528\u65e0\u9700\u5148\u6ce8\u518c\u3002\u8f93\u5165\u5de5\u4f5c\u90ae\u7bb1\uff0c\u6211\u4eec\u4f1a\u53d1\u9001\u5b89\u5168\u767b\u5f55\u94fe\u63a5\u5e76\u5f15\u5bfc\u4f60\u521b\u5efa\u5408\u4f5c\u4f19\u4f34\u8d44\u6599\u3002" : "New here? Enter your work email to receive a secure sign-in link and create your partner profile.");
       form.hidden = false;
     });
 })();

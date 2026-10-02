@@ -15,7 +15,7 @@ function fixture(t) {
 }
 
 function assertSafeRedirect(r, expectCookie) {
-  assert.equal(r.status,302); assert.equal(r.headers.get("Location"),"https://getchinaflow.com/zh/");
+  assert.equal(r.status,302); assert.equal(r.headers.get("Location"),"https://getchinaflow.com/zh/partner/");
   assert.equal(r.headers.get("Cache-Control"),"no-store"); assert.equal(r.headers.get("Referrer-Policy"),"no-referrer");
   assert.equal(r.headers.get("X-Robots-Tag"),"noindex, nofollow");
   assert.equal(Boolean(r.headers.get("Set-Cookie")),expectCookie);

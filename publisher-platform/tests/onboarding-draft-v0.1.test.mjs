@@ -442,7 +442,7 @@ test("app login/consume/session/logout regressions and host-only cookie", async 
   assert.equal(loginCsp.includes(TEST_AUTH_ORIGIN), true);
   const pageHtml = await page.text();
   assert.match(pageHtml, /Continue sign in/);
-  assert.match(pageHtml, /Email me a sign-in link/);
+  assert.match(pageHtml, /Email me a secure sign-in link/);
   assert.match(pageHtml, /type="email"/);
   assert.equal(pageHtml.includes(TEST_AUTH_ORIGIN), true);
   assert.match(pageHtml, /\/v1\/auth\/magic-link/);
