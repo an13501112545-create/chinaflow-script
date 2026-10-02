@@ -2,6 +2,7 @@ import {execFileSync} from "node:child_process";
 import {createProductionAdapters} from "./production-adapters-v1.mjs";
 import {buildGrowthSnapshot} from "./growth-snapshot-v1.mjs";
 const DB="chinaflow-events-v0-1", CONFIG="collector/wrangler.production.jsonc";
+const NPX=process.env.CHINAFLOW_NPX_PATH||"/home/ubuntu/.nvm/versions/node/v22.23.2/bin/npx";
 function sleep(ms){Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,ms);}
 function assertSelect(sql){const q=sql.trim();if(!/^SELECT\b/i.test(q)||q.slice(0,-1).includes(";"))throw new Error("growth query must be single SELECT");return q;}
 export function createGrowthD1Reader({execFile=execFileSync,retries=3}={}){
@@ -9,7 +10,7 @@ export function createGrowthD1Reader({execFile=execFileSync,retries=3}={}){
     const q=assertSelect(sql);let last;
     for(let i=0;i<retries;i++){
       try{
-        const raw=execFile("npx",["--no-install","wrangler","d1","execute",DB,"--remote","--config",CONFIG,"--yes","--json","--command",q],{encoding:"utf8",maxBuffer:4*1024*1024});
+        const raw=execFile(NPX,["--no-install","wrangler","d1","execute",DB,"--remote","--config",CONFIG,"--yes","--json","--command",q],{encoding:"utf8",maxBuffer:4*1024*1024});
         const parsed=JSON.parse(raw), first=Array.isArray(parsed)?parsed[0]:parsed;
         if(first?.success!==true||!Array.isArray(first.results)) throw new Error("D1 growth query failed");
         return first.results;
