@@ -43,3 +43,37 @@ test("Mailopoly adapter only uses read tools and canonical account",async()=>{
   assert.equal(calls[0].arguments.account,MAILOPOLY_ACCOUNT);
   assert.equal(calls.some(x=>x.name==="send_email"),false);
 });
+
+
+test("getEmails batches more than 25 ids without dropping the second page", async()=>{
+  const calls=[];
+  const fsImpl={readFile:async()=>"key"};
+  const fetchImpl=async(_url,options)=>{
+    const body=JSON.parse(options.body);calls.push(body.params.arguments);
+    const ids=body.params.arguments.email_ids??[];
+    return {ok:true,json:async()=>({result:{content:[{type:"text",text:JSON.stringify({results:ids.map(email_id=>({email_id}))})}]}})};
+  };
+  const d=createReplyWatchProductionAdapters({fsImpl,fetchImpl});
+  const ids=Array.from({length:50},(_,i)=>`e${i+1}`);
+  const out=await d.getEmails(ids);
+  assert.equal(out.length,50);
+  assert.equal(calls.length,2);
+  assert.equal(calls[0].email_ids.length,25);
+  assert.equal(calls[1].email_ids.length,25);
+});
+
+test("processed state suppresses already handled email ids without writing state", async()=>{
+  const statePath="/tmp/reply-watch-state-test.json";
+  const fsImpl={
+    readFile:async p=>{if(p===statePath)return JSON.stringify({version:1,processedEmailIds:["seen"]});throw Object.assign(new Error("missing"),{code:"ENOENT"})},
+  };
+  const dependencies={
+    readPipelineValues:async()=>[Array(31).fill("")],
+    searchReceived:async()=>[{email_id:"seen"},{email_id:"new"}],
+    getEmails:async ids=>ids.map(email_id=>({email_id,date:"2026-10-02",sender_email:"nobody@example.com",subject:"hello",body:"hello"})),
+  };
+  const report=await runProductionReplyWatch({dependencies,fsImpl,statePath,now:new Date("2026-10-02T00:00:00Z")});
+  assert.equal(report.processedKnown,1);
+  assert.equal(report.unseenSummaries,1);
+  assert.equal(report.readBodies,1);
+});
