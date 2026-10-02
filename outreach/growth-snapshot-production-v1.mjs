@@ -10,7 +10,7 @@ export function createGrowthD1Reader({execFile=execFileSync,retries=3}={}){
     const q=assertSelect(sql);let last;
     for(let i=0;i<retries;i++){
       try{
-        const raw=execFile(NPX,["--no-install","wrangler","d1","execute",DB,"--remote","--config",CONFIG,"--yes","--json","--command",q],{encoding:"utf8",maxBuffer:4*1024*1024});
+        const raw=execFile(NPX,["--no-install","wrangler","d1","execute",DB,"--remote","--config",CONFIG,"--yes","--json","--command",q],{encoding:"utf8",maxBuffer:4*1024*1024,env:{...process.env,PATH:`/home/ubuntu/.nvm/versions/node/v22.23.2/bin:${process.env.PATH??""}`}});
         const parsed=JSON.parse(raw), first=Array.isArray(parsed)?parsed[0]:parsed;
         if(first?.success!==true||!Array.isArray(first.results)) throw new Error("D1 growth query failed");
         return first.results;
