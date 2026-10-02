@@ -16,4 +16,4 @@ test("already suppressed bounce does not rewrite Sheet",()=>{
 test("auto reply and delay are mark-only",()=>{
   for(const type of ["auto_reply","delivery_delay"]){const [a]=planReplyActions([{emailId:"e",type,mapping:mapped()}]);assert.equal(a.action,"mark_only");assert.equal(a.sheetWrite,null);}
 });
-test("unmapped event never writes",()=>{const [a]=planReplyActions([{emailId:"e",type:"human_reply",mapping:{status:"unmapped"}}]);assert.equal(a.sheetWrite,null);});
+test("unmapped human reply is held and never marked processed",()=>{const [a]=planReplyActions([{emailId:"e",type:"human_reply",mapping:{status:"unmapped"}}]);assert.equal(a.sheetWrite,null);assert.equal(a.action,"manual_mapping_required");assert.equal(a.markProcessed,false);});

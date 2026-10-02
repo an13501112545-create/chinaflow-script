@@ -8,7 +8,8 @@ export function planReplyActions(events){
     const mapping=event?.mapping;
     if(!emailId) throw new Error("emailId missing");
     if(!mapping||mapping.status!=="mapped"||!mapping.prospect){
-      return Object.freeze({emailId,type,action:"mark_only",reason:"UNMAPPED_OR_AMBIGUOUS",sheetWrite:null});
+      if(type==="human_reply") return Object.freeze({emailId,type,action:"manual_mapping_required",reason:"UNMAPPED_OR_AMBIGUOUS",sheetWrite:null,markProcessed:false});
+      return Object.freeze({emailId,type,action:"mark_only",reason:"UNMAPPED_OR_AMBIGUOUS",sheetWrite:null,markProcessed:true});
     }
     const p=mapping.prospect;
     if(type==="human_reply"){

@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import {test} from "node:test";
+import {runReplyOps} from "../reply-ops-v1.mjs";
+const human={emailId:"h1",date:"2026-10-02",subject:"Re",type:"human_reply",mapping:{status:"mapped",prospect:{id:"1",sheetRow:2,status:"Contacted"}}};
+const bounce={emailId:"b1",type:"permanent_bounce",mapping:{status:"mapped",prospect:{id:"2",sheetRow:3,status:"Contacted"}}};
+test("dry run never writes or marks",async()=>{let writes=0,marks=0;const r=await runReplyOps({watcher:async()=>({relevant:[human,bounce]}),actionAdapters:{writeAction:async()=>{writes++}},marker:async()=>{marks++}});assert.equal(r.mode,"dry_run");assert.equal(writes,0);assert.equal(marks,0);});
+test("live gate blocks before writes and marks",async()=>{let writes=0,marks=0;const r=await runReplyOps({live:true,env:{},watcher:async()=>({relevant:[human]}),actionAdapters:{writeAction:async()=>{writes++}},marker:async()=>{marks++}});assert.equal(r.mode,"blocked");assert.equal(writes,0);assert.equal(marks,0);});
+test("live writes each action then marks processed",async()=>{const seq=[];const r=await runReplyOps({live:true,env:{CHINAFLOW_REPLY_OPS_LIVE:"YES"},watcher:async()=>({relevant:[human,bounce]}),actionAdapters:{writeAction:async({row})=>{seq.push(`write:${row}`);return{writes:2}}},marker:async ids=>{seq.push(`mark:${ids[0]}`)}});assert.equal(r.mode,"live");assert.equal(r.writes,4);assert.equal(r.marked,2);assert.deepEqual(seq,["write:2","mark:h1","write:3","mark:b1"]);});
+test("failed Sheet write never marks that event processed",async()=>{let marks=0;await assert.rejects(()=>runReplyOps({live:true,env:{CHINAFLOW_REPLY_OPS_LIVE:"YES"},watcher:async()=>({relevant:[human]}),actionAdapters:{writeAction:async()=>{throw new Error("write failed")}},marker:async()=>{marks++}}),/write failed/);assert.equal(marks,0);});
+
+test("unmapped human reply remains unprocessed for manual mapping",async()=>{let marks=0;const unmapped={emailId:"u1",type:"human_reply",mapping:{status:"unmapped"}};const r=await runReplyOps({live:true,env:{CHINAFLOW_REPLY_OPS_LIVE:"YES"},watcher:async()=>({relevant:[unmapped]}),actionAdapters:{writeAction:async()=>{throw new Error("unexpected")}},marker:async()=>{marks++}});assert.equal(r.marked,0);assert.equal(marks,0);assert.equal(r.actions[0].status,"held_for_manual_mapping");});
