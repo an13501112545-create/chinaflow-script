@@ -446,7 +446,7 @@ test("app login/consume/session/logout regressions and host-only cookie", async 
   assert.match(pageHtml, /type="email"/);
   assert.equal(pageHtml.includes(TEST_AUTH_ORIGIN), true);
   assert.match(pageHtml, /\/v1\/auth\/magic-link/);
-  assert.match(pageHtml, /location\.assign\(IS_ZH \? ["']\/zh\/onboarding["'] : ["']\/onboarding["']\)/);
+  assert.match(pageHtml, /location\.assign\(IS_ZH \? ["']\/zh\/start["'] : ["']\/start["']\)/);
 
   const onboardingPage = await handleAppRequest(
     new Request(`${TEST_APP_ORIGIN}/onboarding`),

@@ -26,7 +26,7 @@ test("GET /zh/login serves Chinese login without changing English login", async 
   assert.match(html, /发送登录链接/);
   assert.match(html, /正在发送登录链接/);
   assert.match(html, /请检查邮箱中的 ChinaFlow 安全登录链接/);
-  assert.match(html, /IS_ZH \? "\/zh\/onboarding" : "\/onboarding"/);
+  assert.match(html, /IS_ZH \? "\/zh\/start" : "\/start"/);
 
   const en = await worker.fetch(new Request(env.APP_ORIGIN + "/login"), env);
   assert.equal(en.status, 200);

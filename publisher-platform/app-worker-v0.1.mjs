@@ -122,6 +122,8 @@ const LOGOUT_ROUTE = "/api/auth/logout";
 const PUBLISHER_TERMS_ROUTE = "/legal/chinaflow-publisher-terms-v1";
 const ONBOARDING_ROUTE = "/onboarding";
 const ZH_ONBOARDING_ROUTE = "/zh/onboarding";
+const PARTNER_HOME_ROUTE = "/start";
+const ZH_PARTNER_HOME_ROUTE = "/zh/start";
 const VERIFY_INSTALL_ROUTE = "/api/onboarding/verify-install";
 const RELEASE_HOSTNAME_ROUTE = "/api/onboarding/release-hostname";
 const REPORTING_SUMMARY_ROUTE = "/api/reporting/summary";
@@ -396,6 +398,72 @@ export async function handleAppRequest(request, env) {
     });
   }
 
+  if (url.pathname === PARTNER_HOME_ROUTE || url.pathname === ZH_PARTNER_HOME_ROUTE) {
+    const zh = url.pathname === ZH_PARTNER_HOME_ROUTE;
+    if (request.method !== "GET") {
+      return json(405, { error: "method_not_allowed" }, { "Allow": "GET" });
+    }
+
+    return html(200, `<!doctype html>
+<html lang="${zh ? "zh-CN" : "en"}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${zh ? "ChinaFlow 合作伙伴入口" : "ChinaFlow Partner Home"}</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f6f9fb;color:#15202b;margin:0}
+main{max-width:800px;margin:56px auto;padding:0 20px 64px}
+h1{font-size:32px;margin:0 0 12px}
+p{color:#52606d;line-height:1.6}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:24px}
+.card{background:white;border:1px solid #d9e2ec;border-radius:12px;padding:24px}
+.card h2{font-size:21px;margin:0 0 12px}
+.action{display:inline-block;margin-top:12px;background:#0b7285;color:white;text-decoration:none;padding:12px 16px;border-radius:8px;font-weight:650}
+.hidden{display:none}
+#status{margin-top:18px}
+@media(max-width:680px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<h1>${zh ? "欢迎使用 ChinaFlow" : "Welcome to ChinaFlow"}</h1>
+<p>${zh ? "请选择你想使用的功能。代客预订酒店无需在网站安装任何代码。" : "Choose how to use ChinaFlow. Booking hotels for clients does not require installing code on your website."}</p>
+<p id="status" role="status">${zh ? "正在检查登录状态…" : "Checking your sign-in status…"}</p>
+<div id="choices" class="grid hidden">
+  <section class="card">
+    <h2>${zh ? "代客预订酒店" : "Book hotels for clients"}</h2>
+    <p>${zh ? "通过你的专属 ChinaFlow 追踪链接进入 Trip.com，为客户预订酒店。无需安装代码。" : "Open Trip.com using your ChinaFlow tracking and book hotels for your clients. No website installation required."}</p>
+    <a class="action" href="${zh ? "/zh/agent-booking" : "/agent-booking"}">${zh ? "进入 Agent Booking" : "Open Agent Booking"}</a>
+  </section>
+  <section class="card">
+    <h2>${zh ? "网站流量变现" : "Monetize your website"}</h2>
+    <p>${zh ? "将安装代码添加到你的网站，并按流程验证网站。" : "Install ChinaFlow on your website and follow the website verification process."}</p>
+    <a class="action" href="${zh ? "/zh/onboarding" : "/onboarding"}">${zh ? "设置网站" : "Set up your website"}</a>
+  </section>
+</div>
+<script>
+(async () => {
+  const status = document.getElementById("status");
+  try {
+    const session = await fetch("/api/auth/session");
+    if (session.status === 401) {
+      location.assign("${zh ? "/zh/login" : "/login"}");
+      return;
+    }
+    if (!session.ok) throw new Error("Session unavailable");
+    status.classList.add("hidden");
+    document.getElementById("choices").classList.remove("hidden");
+  } catch {
+    status.textContent = "${zh ? "无法确认登录状态，请刷新重试。" : "Unable to verify your sign-in. Refresh and try again."}";
+  }
+})();
+</script>
+</main>
+</body>
+</html>`);
+  }
+
   if (url.pathname === PUBLISHER_TERMS_ROUTE) {
     if (request.method !== "GET" && request.method !== "HEAD") {
       return json(
@@ -476,6 +544,8 @@ a{color:#0b7285}
 <main>
 <h1>${zh ? "设置 ChinaFlow" : "Set up ChinaFlow"}</h1>
 <p>${zh ? "将你的网站连接到 ChinaFlow。" : "Connect your approved website to ChinaFlow."}</p>
+<p><a class="action-link" href="${zh ? "/zh/start" : "/start"}">${zh ? "返回合作伙伴入口" : "Partner home"}</a>
+<a class="action-link" href="${zh ? "/zh/agent-booking" : "/agent-booking"}">${zh ? "直接代客订酒店（无需安装）" : "Book hotels for clients (no installation required)"}</a></p>
 
 <section id="loading" class="card">
   <p>${zh ? "正在检查你的账户…" : "Checking your account…"}</p>
@@ -508,6 +578,7 @@ a{color:#0b7285}
 </section>
 
 <section id="install" class="card hidden">
+  <p>${zh ? "如果你只想为客户订酒店，请直接使用 Agent Booking，无需安装以下代码。" : "Only booking hotels for clients? Go to Agent Booking instead. No installation needed."} <a href="${zh ? "/zh/agent-booking" : "/agent-booking"}">${zh ? "进入 Agent Booking" : "Open Agent Booking"}</a></p>
   <h2>${zh ? "安装代码" : "Installation code"}</h2>
   <p>${zh ? "将此脚本添加到你的网站。" : "Add this script to your approved website."}</p>
   <pre id="snippet"></pre>
@@ -1641,7 +1712,7 @@ ${turnstileSiteKey
           return;
         }
 
-        location.assign(IS_ZH ? "/zh/onboarding" : "/onboarding");
+        location.assign(IS_ZH ? "/zh/start" : "/start");
         return;
       } catch {
         status.textContent = (IS_ZH ? "无法登录，请重试。" : "Unable to sign in. Please try again.");
@@ -1656,7 +1727,7 @@ ${turnstileSiteKey
   fetch("/api/auth/session")
     .then(async response => {
       if (response.ok) {
-        message.textContent = (IS_ZH ? "你已登录 ChinaFlow。" : "You are already signed in to ChinaFlow.");
+        location.assign(IS_ZH ? "/zh/start" : "/start");
       } else {
         message.textContent = (IS_ZH ? "\u9996\u6b21\u4f7f\u7528\u65e0\u9700\u5148\u6ce8\u518c\u3002\u8f93\u5165\u5de5\u4f5c\u90ae\u7bb1\uff0c\u6211\u4eec\u4f1a\u53d1\u9001\u5b89\u5168\u767b\u5f55\u94fe\u63a5\u5e76\u5f15\u5bfc\u4f60\u521b\u5efa\u5408\u4f5c\u4f19\u4f34\u8d44\u6599\u3002" : "New here? Enter your work email to receive a secure sign-in link and create your partner profile.");
         form.hidden = false;
