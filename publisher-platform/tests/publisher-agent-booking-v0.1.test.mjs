@@ -14,7 +14,7 @@ const API_ROUTE = "/api/agent-booking/launch";
 const PAGE_ROUTE = "/agent-booking";
 const ROUTING_ENV = {
   AGENT_BOOKING_TRIP_AID: "10021103",
-  AGENT_BOOKING_TRIP_SID: "330739613"
+  AGENT_BOOKING_TRIP_SID: "330567322"
 };
 
 function fixture(t) {
@@ -109,7 +109,7 @@ test("agent booking launch uses authenticated publisher Trip credentials and age
     product: "hotel",
     placement: "agent_booking_p",
     destination_url:
-      "https://www.trip.com/hotels?Allianceid=10021103&SID=330739613&trip_sub1=agent_booking_p"
+      "https://www.trip.com/hotels?Allianceid=10021103&SID=330567322&trip_sub1=agent_booking_p"
   });
 });
 
@@ -225,7 +225,7 @@ test("agent booking rollout gate is exact and enabled in TEST and Production con
   assert.equal(testConfig.vars.AGENT_BOOKING_TRIP_AID, "10021103");
   assert.equal(testConfig.vars.AGENT_BOOKING_TRIP_SID, "CHINAFLOW_TEST_ONLY");
   assert.equal(prodConfig.vars.AGENT_BOOKING_TRIP_AID, "10021103");
-  assert.equal(prodConfig.vars.AGENT_BOOKING_TRIP_SID, "330739613");
+  assert.equal(prodConfig.vars.AGENT_BOOKING_TRIP_SID, "330567322");
 });
 
 test("agent booking API route is gated, same-origin and session-derived", async t => {
@@ -328,7 +328,7 @@ test("agent booking page is gated and keeps supplier credentials out of static H
   assert.match(html, /Book hotels for your clients/);
   assert.match(html, /\/api\/agent-booking\/launch\?product=hotel/);
   assert.match(html, /Open Trip\.com/);
-  assert.doesNotMatch(html, /10021103|330739613|Allianceid|trip_sub1/);
+  assert.doesNotMatch(html, /10021103|330739613|330567322|Allianceid|trip_sub1/);
 
   for (const method of ["POST","PUT","PATCH","DELETE","OPTIONS"]) {
     const rejected = await handleAppRequest(
