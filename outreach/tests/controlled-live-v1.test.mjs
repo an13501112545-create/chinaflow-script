@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { filterExactSentMatches, runControlledLiveSend } from "../controlled-live-v1.mjs";
 import { MAILOPOLY_ACCOUNT, sanitizeOperationalError, toShanghaiDate } from "../foundation-v1.mjs";
+import { ROUND_2_TEMPLATES } from "../runner-v2.mjs";
 
 const trackingUrl = `https://publishers.getchinaflow.com/r/${"a".repeat(64)}`;
 const header = ["ID", "B", "C", "Publisher / Website", "E", "F", "G", "H", "I", "J", "K", "L", "M", "Email", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "Outreach Campaign", "Tracking URL", "Round 2 Status", "Round 2 Sent Date", "Round 2 Language"];
@@ -10,7 +11,7 @@ function row(overrides = {}) {
   Object.assign(values, { 0: "6", 3: "Publisher", 13: "owner@example.com", 26: "round2-zh-20260928", 27: trackingUrl, 28: "Prepared", 29: "", 30: "ZH" }, overrides);
   return values;
 }
-function makeHarness({ rows = [row()], ledgerRecords = [], preMatches = [], postMatchSequence, postMatches = [{ recipient: "owner@example.com", sender: MAILOPOLY_ACCOUNT, subject: "帮客户订中国酒店，也可以获得额外佣金", timestamp: "2026-09-29T12:00:00.000Z" }], mailboxPayload, sendResult = { accepted: true, messageId: "message-1" }, sendError, fenceFailure = false, sheetReadback, syncError } = {}) {
+function makeHarness({ rows = [row()], ledgerRecords = [], preMatches = [], postMatchSequence, postMatches = [{ recipient: "owner@example.com", sender: MAILOPOLY_ACCOUNT, subject: ROUND_2_TEMPLATES.ZH.subject, timestamp: "2026-09-29T12:00:00.000Z" }], mailboxPayload, sendResult = { accepted: true, messageId: "message-1" }, sendError, fenceFailure = false, sheetReadback, syncError } = {}) {
   const calls = [];
   let ledger = { version: 1, records: structuredClone(ledgerRecords) };
   let sendCalls = 0;
@@ -61,7 +62,7 @@ test("unsafe ledger states block without send", async () => {
 });
 
 test("pre-send duplicate and duplicate ambiguity block without send", async () => {
-  const exact = { recipient: "owner@example.com", sender: MAILOPOLY_ACCOUNT, subject: "帮客户订中国酒店，也可以获得额外佣金", timestamp: "2026-09-29T12:00:00.000Z" };
+  const exact = { recipient: "owner@example.com", sender: MAILOPOLY_ACCOUNT, subject: ROUND_2_TEMPLATES.ZH.subject, timestamp: "2026-09-29T12:00:00.000Z" };
   for (const preMatches of [[exact], [exact, { ...exact }]]) {
     const harness = makeHarness({ preMatches });
     assertNoSend(await run(harness), harness);
@@ -118,7 +119,7 @@ test("timeouts, resets, and clear rejection never retry or write Sheet", async (
 });
 
 test("delayed Sent indexing poll 2 confirms without resend", async () => {
-  const exact = { recipient: "owner@example.com", sender: MAILOPOLY_ACCOUNT, subject: "帮客户订中国酒店，也可以获得额外佣金", timestamp: "2026-09-29T12:00:00.000Z" };
+  const exact = { recipient: "owner@example.com", sender: MAILOPOLY_ACCOUNT, subject: ROUND_2_TEMPLATES.ZH.subject, timestamp: "2026-09-29T12:00:00.000Z" };
   const harness = makeHarness({ postMatchSequence: [[], [exact]] });
   const result = await run(harness);
   assert.equal(result.status, "pass");
@@ -128,7 +129,7 @@ test("delayed Sent indexing poll 2 confirms without resend", async () => {
 });
 
 test("delayed Sent indexing poll 3 confirms without resend", async () => {
-  const exact = { recipient: "owner@example.com", sender: MAILOPOLY_ACCOUNT, subject: "帮客户订中国酒店，也可以获得额外佣金", timestamp: "2026-09-29T12:00:00.000Z" };
+  const exact = { recipient: "owner@example.com", sender: MAILOPOLY_ACCOUNT, subject: ROUND_2_TEMPLATES.ZH.subject, timestamp: "2026-09-29T12:00:00.000Z" };
   const harness = makeHarness({ postMatchSequence: [[], [], [exact]] });
   const result = await run(harness);
   assert.equal(result.status, "pass");
@@ -138,7 +139,7 @@ test("delayed Sent indexing poll 3 confirms without resend", async () => {
 });
 
 test("delayed Sent indexing poll 4 confirms without resend", async () => {
-  const exact = { recipient: "owner@example.com", sender: MAILOPOLY_ACCOUNT, subject: "帮客户订中国酒店，也可以获得额外佣金", timestamp: "2026-09-29T12:00:00.000Z" };
+  const exact = { recipient: "owner@example.com", sender: MAILOPOLY_ACCOUNT, subject: ROUND_2_TEMPLATES.ZH.subject, timestamp: "2026-09-29T12:00:00.000Z" };
   const harness = makeHarness({ postMatchSequence: [[], [], [], [exact]] });
   const result = await run(harness);
   assert.equal(result.status, "pass");
