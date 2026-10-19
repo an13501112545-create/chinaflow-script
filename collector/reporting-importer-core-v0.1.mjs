@@ -178,6 +178,7 @@ export function normalizeCurrency(value) {
 }
 const TRIP_PRODUCT_LINE_MAP = Object.freeze({
   htl: "hotel",
+  Hotels: "hotel",
   flt: "flight",
   bdl: "flight_hotel",
   cru: "cruise",
@@ -193,7 +194,8 @@ const TRIP_ORDER_STATUS_MAP = Object.freeze({
   W: "wait_pay",
   C: "canceled",
   Q: "refunded",
-  P: "pending"
+  P: "pending",
+  Pending: "pending"
 });
 
 const TRIP_COMMISSION_STATUS_MAP = Object.freeze({
