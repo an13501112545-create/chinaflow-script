@@ -177,6 +177,7 @@ export function normalizeCurrency(value) {
   return value;
 }
 const TRIP_PRODUCT_LINE_MAP = Object.freeze({
+  Hotels: "hotel",
   htl: "hotel",
   flt: "flight",
   bdl: "flight_hotel",
@@ -189,6 +190,7 @@ const TRIP_PRODUCT_LINE_MAP = Object.freeze({
 });
 
 const TRIP_ORDER_STATUS_MAP = Object.freeze({
+  Completed: "completed",
   S: "successful",
   W: "wait_pay",
   C: "canceled",
